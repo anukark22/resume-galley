@@ -292,7 +292,11 @@ button,input,select,textarea{font:inherit; color:inherit}
 .r-contact a{color:inherit; text-decoration:none; border-bottom:.5px solid var(--paper-line)}
 .r-contact .sep{color:var(--paper-line)}
 
-.r-sec{margin-top:calc(14px * var(--rs))}
+/* a heading and its content travel together: if the whole section will not fit
+   in what is left of the page, it moves to the next one intact */
+.r-sec{margin-top:calc(14px * var(--rs)); break-inside:avoid}
+/* screen-only stand-in for that page break, so the preview matches the print */
+.pagegap{width:100%; pointer-events:none}
 .r-sec-h{
   font-size:calc(10pt * var(--rs)); font-weight:600; letter-spacing:.11em; text-transform:uppercase;
   color:var(--acc); margin:0 0 calc(7px * var(--rs)); padding-bottom:calc(3px * var(--rs));
@@ -476,6 +480,11 @@ input[type=range]{width:100%; accent-color:var(--mark)}
     box-shadow:none !important; width:100% !important; min-height:0 !important;
     transform:none !important; background:#fff !important;
   }
+  /* every page gets its margins from @page, so the sheet must not add its own -
+     otherwise only the first page is indented and the rest run to the edge */
+  .sheet-inner{padding:0 !important}
+  .pagegap{display:none !important}
+  .r-sec{break-inside:avoid}
   .r-item,.r-bul li{break-inside:avoid}
   .r-sec-h{break-after:avoid}
 }

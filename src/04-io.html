@@ -1543,7 +1543,10 @@ function doPrint() {
   const d = RG.doc.design;
   let st = $("#pageStyle");
   if (!st) { st = document.createElement("style"); st.id = "pageStyle"; document.head.appendChild(st); }
-  st.textContent = "@page{size:" + (d.paper === "a4" ? "A4" : "letter") + "; margin:0}" +
+  /* the page margin belongs to @page so that every page carries it, not just
+     the first - the sheet drops its own padding in the print stylesheet */
+  st.textContent = "@page{size:" + (d.paper === "a4" ? "A4" : "letter") +
+                   "; margin:" + d.mg + "px}" +
                    "@media print{.sheet-wrap{width:auto !important;height:auto !important}}";
   /* embedded viewers sandbox printing; say so rather than letting it fail silently */
   if (window.claude && window.claude.use) {

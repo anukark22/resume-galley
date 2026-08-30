@@ -680,13 +680,38 @@ function schedulePaginate() {
 document.addEventListener("visibilitychange", () => { if (!document.hidden) paginate(); });
 
 function paginate() {
-  const sheet = $("#sheet");
+  const sheet = $("#sheet"), inner = $("#sheetInner");
   const d = doc.design;
   const pageH = d.paper === "a4" ? 1123 : 1056;
-  const contentH = $("#sheetInner").scrollHeight + 2;
-  const pages = Math.max(1, Math.ceil(contentH / pageH));
+  /* @page carries the margin at print time, so a page holds this much content */
+  const usable = Math.max(160, pageH - d.mg * 2);
+
+  $$(".pagegap", inner).forEach(n => n.remove());
+  const padTop = parseFloat(getComputedStyle(inner).paddingTop) || 0;
+
+  /* Walk the sections in order. One that would straddle a page boundary is
+     pushed down whole, which is what break-inside:avoid does when printing;
+     the spacer just makes the preview agree. A section taller than a page
+     cannot be saved from splitting, so leave it alone. */
+  for (const el of Array.from(inner.children)) {
+    if (!el.classList.contains("r-sec")) continue;
+    const top = el.offsetTop - padTop;
+    const h = el.offsetHeight;
+    if (h > usable) continue;
+    const room = usable - (top % usable);
+    if (room > 2 && h > room + 0.5) {
+      const gap = document.createElement("div");
+      gap.className = "pagegap";
+      gap.style.height = room + "px";
+      inner.insertBefore(gap, el);
+    }
+  }
+
+  const last = inner.lastElementChild;
+  const flow = last ? Math.max(0, last.offsetTop - padTop + last.offsetHeight) : 0;
+  const pages = Math.max(1, Math.ceil((flow - 1) / usable));
   sheet.style.minHeight = pages * pageH + "px";
-  const fill = Math.round((contentH / (pages * pageH)) * 100);
+  const fill = Math.max(1, Math.round((flow / (pages * usable)) * 100));
   const bar = $("#stageBar");
   bar.innerHTML =
     '<span class="chip">' + pages + " page" + (pages > 1 ? "s" : "") + "</span>" +
