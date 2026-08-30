@@ -11,4 +11,6 @@ cat src/01-style.html src/02-markup.html src/03-core.html src/04-io.html src/05-
   cat app.html
   printf '%s\n' '</body>' '</html>'
 } > index.html
-echo "built app.html and index.html"
+mkdir -p public
+cp index.html public/index.html
+echo "built app.html, index.html and public/index.html"

@@ -1,8 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "",
-  "outputDirectory": ".",
+  "buildCommand": "bash src/build.sh",
+  "outputDirectory": "public",
+  "functions": {
+    "api/analyze-job.js": { "maxDuration": 60 }
+  },
   "headers": [
     {
       "source": "/(.*)",

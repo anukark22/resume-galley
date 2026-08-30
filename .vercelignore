@@ -1,4 +1,3 @@
-# the site is the built index.html; sources and fixtures are not served
-src/
+# fixtures are not part of the deployment; src/ is needed by the build command
 test/
 .claude/
