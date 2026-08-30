@@ -1,0 +1,4 @@
+# the site is the built index.html; sources and fixtures are not served
+src/
+test/
+.claude/
