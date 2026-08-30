@@ -101,6 +101,36 @@ Note the `.docx` export always puts headings above their section rather than
 beside it — Word's two-column layouts read badly to applicant tracking systems.
 Use **PDF** when the side-heading look matters.
 
+## Job fit
+
+The **Job fit** tab compares the resume you are editing against a pasted job
+description using a model running locally through [Ollama](https://ollama.com).
+Nothing leaves the machine: the resume and the posting go to
+`http://localhost:11434` and nowhere else.
+
+```bash
+ollama pull qwen3:8b
+```
+
+Use `qwen3:4b` instead on a machine without GPU offload - a 7B model on CPU took
+about ten minutes for one report here, a 4B is far quicker. Any installed model
+works; **Refresh list** reads what Ollama actually has.
+
+The report gives a fit score, every requirement marked MATCH / PARTIAL / MISSING
+/ UNCLEAR, strengths and gaps with severity, keyword coverage, and improvements
+ranked by impact. The prompt is deliberately unflattering: keyword overlap is not
+evidence, coursework and projects are not professional experience, and a missing
+required qualification costs far more than a missing preferred one.
+
+This only works where the page can reach localhost - the local `index.html`, or a
+copy served from localhost. The published web copy cannot: its sandbox blocks
+outside addresses, and it says so in the tab. If you serve the app from some
+other origin, allow it:
+
+```bash
+set OLLAMA_ORIGINS=http://localhost:4321
+```
+
 ## Deleting
 
 Every delete asks first — sections, entries, bullet points, skill groups and
