@@ -27,3 +27,4 @@ test/real-*
 public/
 .env.local
 .env
+!.env.example
