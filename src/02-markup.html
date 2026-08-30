@@ -61,11 +61,13 @@
         <button class="tab" role="tab" id="tab-content" aria-selected="true" data-pane="content">Content</button>
         <button class="tab" role="tab" id="tab-design" aria-selected="false" data-pane="design">Design</button>
         <button class="tab" role="tab" id="tab-files" aria-selected="false" data-pane="files">Files</button>
+        <button class="tab" role="tab" id="tab-fit" aria-selected="false" data-pane="fit">Job fit</button>
       </div>
 
       <div class="pane on" id="pane-content" role="tabpanel" aria-labelledby="tab-content"></div>
       <div class="pane" id="pane-design" role="tabpanel" aria-labelledby="tab-design"></div>
       <div class="pane" id="pane-files" role="tabpanel" aria-labelledby="tab-files"></div>
+      <div class="pane" id="pane-fit" role="tabpanel" aria-labelledby="tab-fit"></div>
     </aside>
 
     <main class="canvas" id="canvas">
@@ -83,6 +85,7 @@
         </div>
       </div>
       <div class="pages" id="pages"></div>
+      <div id="report" hidden></div>
       <div id="measure" aria-hidden="true"></div>
     </main>
   </div>

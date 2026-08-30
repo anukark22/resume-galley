@@ -402,6 +402,91 @@ button,input,select,textarea{font:inherit; color:inherit}
 .r-empty b{display:block; font-size:14px; font-weight:500; color:var(--ink-2); margin-bottom:4px}
 .r-empty span{font-size:12.5px}
 
+/* ============================================================ report === */
+#report{width:min(780px,100%); padding:6px 22px 0}
+.rep{display:flex; flex-direction:column; gap:26px}
+.rep-head{display:flex; align-items:center; gap:20px}
+.rep-score{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; flex:none;
+  width:96px; height:96px; border-radius:50%; border:2px solid var(--line); background:var(--panel);
+}
+.rep-score b{font-size:30px; font-weight:600; line-height:1; letter-spacing:-.02em}
+.rep-score span{font-size:9.5px; color:var(--ink-2); margin-top:3px;
+  font-family:"IBM Plex Mono",monospace; letter-spacing:.06em}
+.rep-score.ok{border-color:var(--ok)} .rep-score.ok b{color:var(--ok)}
+.rep-score.warn{border-color:var(--warn)} .rep-score.warn b{color:var(--warn)}
+.rep-score.bad{border-color:var(--danger)} .rep-score.bad b{color:var(--danger)}
+.rep-lead{flex:1; min-width:0}
+.rep-lead .verdict{
+  margin:0 0 9px; font-family:"Newsreader",Georgia,serif; font-size:19px; line-height:1.35;
+  letter-spacing:-.01em; text-wrap:balance;
+}
+.rep-chips{display:flex; flex-wrap:wrap; gap:6px}
+.repchip{
+  font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.08em; text-transform:uppercase;
+  padding:4px 8px; border-radius:5px; background:var(--panel-3); color:var(--ink-2);
+}
+.repchip.ok{background:var(--accent-soft); color:var(--ok)}
+.repchip.warn{background:var(--warn-soft); color:var(--warn)}
+.repchip.bad{background:var(--danger-soft); color:var(--danger)}
+.rep-summary{margin:0; font-size:14px; line-height:1.6; color:var(--ink-2); max-width:68ch}
+.rep-sec h3{
+  margin:0 0 11px; font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--ink-2); font-weight:500;
+}
+.reqlist{display:flex; flex-direction:column}
+.req{display:flex; align-items:flex-start; gap:11px; padding:10px 0; border-top:1px solid var(--line-2)}
+.reqlist > .req:first-child{border-top:0}
+.reqdot{width:7px; height:7px; border-radius:50%; flex:none; margin-top:6px; background:var(--ink-3)}
+.reqdot.ok{background:var(--ok)} .reqdot.warn{background:var(--warn)} .reqdot.bad{background:var(--danger)}
+.reqmain{flex:1; min-width:0}
+.reqmain b{display:block; font-size:13px; font-weight:450; line-height:1.45}
+.reqmain small{display:block; font-size:12px; color:var(--ink-2); line-height:1.5; margin-top:2px}
+.reqtag{
+  font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.08em; color:var(--ink-3);
+  flex:none; padding-top:3px;
+}
+.reqstat{
+  font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.08em; flex:none;
+  padding:3px 7px; border-radius:4px; background:var(--panel-3); color:var(--ink-2);
+}
+.reqstat.ok{background:var(--accent-soft); color:var(--ok)}
+.reqstat.warn{background:var(--warn-soft); color:var(--warn)}
+.reqstat.bad{background:var(--danger-soft); color:var(--danger)}
+.cardlist{display:flex; flex-direction:column; gap:2px}
+.repcard{padding:11px 0; border-top:1px solid var(--line-2)}
+.cardlist > .repcard:first-child{border-top:0}
+.repcard .cardtop{display:flex; align-items:flex-start; gap:10px}
+.repcard b{font-size:13.5px; font-weight:500; flex:1; line-height:1.4}
+.repcard p{margin:5px 0 0; font-size:12.5px; color:var(--ink-2); line-height:1.55; max-width:68ch}
+.repcard q{
+  display:block; margin-top:6px; font-size:12px; color:var(--ink-2); line-height:1.5;
+  padding-left:11px; border-left:2px solid var(--line); font-style:italic; quotes:none;
+}
+.kwcols{display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px}
+@media (max-width:760px){ .kwcols{grid-template-columns:1fr} }
+.kwcols h4{
+  margin:0 0 7px; font-family:"IBM Plex Mono",monospace; font-size:9px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:500;
+}
+.kws{display:flex; flex-wrap:wrap; gap:5px}
+.kw{font-size:11.5px; padding:3px 7px; border-radius:5px; background:var(--panel-3); color:var(--ink-2)}
+.kw.ok{background:var(--accent-soft); color:var(--ok)}
+.kw.warn{background:var(--warn-soft); color:var(--warn)}
+.kw.bad{background:var(--danger-soft); color:var(--danger)}
+.replist{margin:0; padding-left:16px; display:flex; flex-direction:column; gap:5px}
+.replist li{font-size:12.5px; color:var(--ink-2); line-height:1.55}
+.rep-foot{
+  margin:0; padding:14px 0 0; border-top:1px solid var(--line-2); font-size:11.5px; color:var(--ink-3);
+  line-height:1.5;
+}
+.rep-wait{
+  display:flex; flex-direction:column; gap:5px; align-items:center; justify-content:center;
+  min-height:300px; text-align:center;
+}
+.rep-wait b{font-size:14px; font-weight:500}
+.rep-wait span{font-size:12.5px; color:var(--ink-2)}
+
 /* offscreen measuring copy */
 #measure{
   position:absolute; left:-10000px; top:0; visibility:hidden; pointer-events:none;
@@ -739,11 +824,13 @@ input[type=range]{
         <button class="tab" role="tab" id="tab-content" aria-selected="true" data-pane="content">Content</button>
         <button class="tab" role="tab" id="tab-design" aria-selected="false" data-pane="design">Design</button>
         <button class="tab" role="tab" id="tab-files" aria-selected="false" data-pane="files">Files</button>
+        <button class="tab" role="tab" id="tab-fit" aria-selected="false" data-pane="fit">Job fit</button>
       </div>
 
       <div class="pane on" id="pane-content" role="tabpanel" aria-labelledby="tab-content"></div>
       <div class="pane" id="pane-design" role="tabpanel" aria-labelledby="tab-design"></div>
       <div class="pane" id="pane-files" role="tabpanel" aria-labelledby="tab-files"></div>
+      <div class="pane" id="pane-fit" role="tabpanel" aria-labelledby="tab-fit"></div>
     </aside>
 
     <main class="canvas" id="canvas">
@@ -761,6 +848,7 @@ input[type=range]{
         </div>
       </div>
       <div class="pages" id="pages"></div>
+      <div id="report" hidden></div>
       <div id="measure" aria-hidden="true"></div>
     </main>
   </div>
@@ -1682,8 +1770,21 @@ function renderFiles() {
   $("#pane-files").innerHTML = h;
 }
 
+let canvasMode = "paper";
+function setCanvasMode(m) {
+  canvasMode = m;
+  const paper = m === "paper";
+  $("#pages").hidden = !paper;
+  $("#report").hidden = paper;
+  $("#docStat").style.visibility = paper ? "" : "hidden";
+  const z = $(".zoom");
+  if (z) z.style.visibility = paper ? "" : "hidden";
+  if (paper) fit();
+}
+
 function renderAll() {
   renderEditor(); renderDesign(); renderFiles(); renderPreview();
+  if (RG.renderFit) RG.renderFit();
   const f = activeEntry();
   if (f) $("#docName").textContent = f.name || "Untitled resume";
 }
@@ -1932,6 +2033,9 @@ $("#pane-files").addEventListener("keydown", e => {
 $$(".tab").forEach(t => t.addEventListener("click", () => {
   $$(".tab").forEach(x => x.setAttribute("aria-selected", String(x === t)));
   $$(".pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + t.dataset.pane));
+  /* the left pane decides what the right pane is for */
+  setCanvasMode(t.dataset.pane === "fit" ? "fit" : "paper");
+  if (t.dataset.pane === "fit" && RG.renderReport) RG.renderReport();
 }));
 $$(".mobnav button").forEach(b => b.addEventListener("click", () => {
   $$(".mobnav button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
@@ -2050,7 +2154,8 @@ window.RG = {
   renderEditor, renderPreview, renderFiles, renderDesign, renderAll,
   syncDesignUI: renderDesign, save, blankDoc, starterDoc, migrate,
   TYPES, uid, openModal, closeModal, $, $$, esc, ask, fmtDate, fmtRange,
-  newFile, setActiveName, activeEntry, firstVisit, flashSaved
+  newFile, setActiveName, activeEntry, firstVisit, flashSaved,
+  setCanvasMode, libRef: () => lib
 };
 applyTheme();
 renderAll();
@@ -3691,6 +3796,479 @@ RG.toast = toast;   /* the editor uses it for Undo after a delete */
 
 /* first-run nudge, once ever - after that your saved resume opens straight up */
 if (RG.firstVisit()) setTimeout(() => RG.openModal("#importScrim"), 350);
+
+})();
+</script>
+
+<script>
+/* ============================================================================
+   Resume Galley - job fit analysis against a local Ollama model
+
+   Everything here stays on the machine: the resume and the job description go
+   to http://localhost:11434 and nowhere else. No key, no account, no upload.
+   ========================================================================== */
+(function () {
+"use strict";
+
+const RG = window.RG;
+const { $, $$, esc } = RG;
+
+const DEFAULTS = { url: "http://localhost:11434", model: "qwen3:8b" };
+const THINKERS = /^(qwen3|deepseek-r1|magistral|phi4-reasoning|granite3\.\d-dense)/i;
+
+const SYSTEM_PROMPT = [
+"You are an honest, rigorous job-fit and resume analysis engine.",
+"Your job is to compare a candidate's resume against a specific job description and determine how suitable the candidate actually is for that role.",
+"",
+"Your goal is NOT to encourage the candidate.",
+"Your goal is to give the most accurate assessment possible based ONLY on the evidence provided.",
+"",
+"Do not inflate the candidate's suitability.",
+"Do not assume skills that are not explicitly demonstrated.",
+"Do not treat vague keyword overlap as proof of experience.",
+"Do not reward the candidate simply because they are a student or because their background is generally related to the role.",
+"Do not penalize them for wording differences when the underlying experience clearly matches.",
+"",
+"ANALYSIS",
+"Analyze the job description first and identify its actual requirements.",
+"Separate requirements into: required qualifications, preferred qualifications, technical skills, tools/technologies, years or type of experience, education requirements, domain knowledge, responsibilities, soft skills, other constraints.",
+"",
+"Then compare each requirement against the candidate's resume.",
+"For every important requirement, classify the candidate as:",
+"MATCH - clearly demonstrated",
+"PARTIAL - some relevant evidence, but insufficient or indirect",
+"MISSING - no evidence in the resume",
+"UNCLEAR - potentially relevant, but the resume does not provide enough evidence",
+"",
+"Never classify something as MATCH merely because a related keyword appears.",
+"Job requires 'Experience with React and TypeScript' and the resume says 'Built websites using JavaScript': this is NOT a match for React or TypeScript.",
+"Job requires 'Python' and the resume says 'Developed machine-learning projects in Python': this IS a match.",
+"",
+"FIT SCORE",
+"Give the candidate an overall suitability score from 0-100 representing actual demonstrated fit, not potential.",
+"90-100: Exceptional match. 80-89: Strong match. 70-79: Good/credible match. 60-69: Borderline match. 40-59: Weak match. 0-39: Poor match.",
+"Do not artificially push the score toward 70 or above. A candidate can receive 35, 48 or 57 if that is what the evidence supports.",
+"",
+"REQUIRED VS PREFERRED",
+"Missing a preferred qualification should have a relatively small effect.",
+"Missing a clearly stated required qualification should have a substantial effect.",
+"If the job requires professional experience and the candidate has none, explicitly identify this as a major gap.",
+"Do not compensate for a major missing requirement merely because the candidate has projects or coursework.",
+"",
+"EXPERIENCE LEVEL",
+"Distinguish coursework, personal projects, academic projects, internships, freelance work and professional employment.",
+"Do not represent an academic project as professional experience.",
+"Do not represent an internship as multiple years of full-time experience.",
+"Do not assume project experience satisfies a professional-experience requirement unless the job description clearly allows equivalent experience.",
+"",
+"TRANSFERABLE SKILLS",
+"Transferable skills may count when genuinely relevant, but do not automatically treat adjacent technologies as equivalent.",
+"Clearly distinguish 'candidate has this skill' from 'candidate could probably learn this skill'. Only the first should contribute strongly to the current-fit score.",
+"",
+"EDUCATION",
+"Check degree, major, graduation status, required academic background, and GPA only if explicitly requested.",
+"Do not penalize the candidate for not having information the employer did not request.",
+"",
+"LOCATION / WORK AUTHORISATION",
+"Only evaluate location, relocation, visa sponsorship or work authorisation if there is enough information. Otherwise mark it UNKNOWN rather than assuming eligibility or ineligibility.",
+"",
+"RESUME QUALITY",
+"Separately evaluate whether the resume communicates the candidate's qualifications: missing evidence, weakly quantified achievements, generic bullet points, missing technologies, unclear dates, poor alignment, or relevant experience that is present but poorly communicated.",
+"Do NOT lower the qualification score because the writing is weak. Report presentation problems separately.",
+"",
+"ATS / KEYWORD ANALYSIS",
+"Identify important job-description keywords that are present clearly, present under different wording, or missing.",
+"Do not recommend keyword stuffing. Only recommend adding a keyword if the candidate genuinely has that skill or experience.",
+"",
+"HONEST RECRUITER TEST",
+"Imagine a recruiter spends 30-60 seconds on this resume. Would this candidate realistically be worth interviewing for this particular role?",
+"Choose VERY LIKELY, LIKELY, POSSIBLE, UNLIKELY or VERY UNLIKELY and explain why.",
+"Do not confuse 'technically eligible to apply' with 'competitive candidate'.",
+"",
+"STRENGTHS AND GAPS",
+"Identify the 3-5 strongest aspects of the candidate's profile for THIS job, each supported by evidence from the resume. No generic compliments.",
+"Identify the 3-5 most important weaknesses or missing requirements. Prioritise gaps that could actually prevent an interview. Do not list trivial missing keywords above major experience gaps.",
+"",
+"IMPROVEMENTS",
+"Give practical recommendations prioritised HIGH, MEDIUM or LOW impact, limited to things the candidate can realistically improve.",
+"Never recommend lying, exaggerating experience, or adding skills the candidate does not possess.",
+"",
+"APPLICATION DECISION",
+"Give one final recommendation: APPLY, APPLY - BUT TAILOR RESUME, STRETCH APPLICATION, or LOW PRIORITY.",
+"Do not tell the candidate to apply simply because 'there is no harm in trying'.",
+"",
+"OUTPUT",
+"Return ONLY valid JSON, no prose and no code fences, using exactly this structure:",
+'{"fit_score":0,"interview_likelihood":"","application_recommendation":"","one_line_verdict":"","summary":"","strengths":[{"title":"","explanation":"","evidence":""}],"gaps":[{"title":"","severity":"","explanation":"","job_requirement":""}],"requirements":[{"requirement":"","importance":"","status":"","evidence":"","impact":""}],"keyword_analysis":{"present":[],"related_wording":[],"missing":[]},"resume_communication_issues":[],"improvements":[{"priority":"","recommendation":"","reason":""}]}',
+"",
+"FINAL RULE",
+"Be honest even when the answer is disappointing. A score of 52 with an accurate explanation is better than a score of 82 that makes the candidate feel good.",
+"Never invent qualifications. Never assume experience. Never confuse potential with current suitability. Judge the candidate against the actual job."
+].join("\n");
+
+/* ------------------------------------------------------------- settings -- */
+function cfg() {
+  const l = RG.libRef();
+  l.ollama = Object.assign({}, DEFAULTS, l.ollama || {});
+  return l.ollama;
+}
+function fitState() {
+  const d = RG.doc;
+  if (!d.fit) d.fit = { jd: "", result: null, model: "", at: 0, error: "" };
+  return d.fit;
+}
+
+/* --------------------------------------------------------------- client -- */
+let running = null;
+
+async function listModels() {
+  const c = cfg();
+  const r = await fetch(c.url.replace(/\/+$/, "") + "/api/tags", { method: "GET" });
+  if (!r.ok) throw new Error("Ollama answered " + r.status);
+  const j = await r.json();
+  return (j.models || []).map(m => m.name);
+}
+
+async function analyse(onProgress) {
+  const c = cfg(), f = fitState();
+  const resume = RG.io.buildTxt().trim();
+  const jd = (f.jd || "").trim();
+  if (!jd) throw new Error("Paste the job description first.");
+  if (resume.replace(/\s/g, "").length < 40) {
+    throw new Error("This resume is nearly empty - there is nothing to compare against the job.");
+  }
+
+  const user = "CANDIDATE RESUME\n" + resume + "\n\nJOB DESCRIPTION\n" + jd;
+  const base = {
+    model: c.model,
+    messages: [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: user }],
+    stream: true,
+    format: "json",
+    options: { temperature: 0.2, num_ctx: 8192 }
+  };
+
+  running = new AbortController();
+  let body = THINKERS.test(c.model) ? Object.assign({ think: false }, base) : base;
+  let res;
+  try {
+    res = await post(c, body, running.signal);
+    /* older builds and non-reasoning models reject the think flag outright */
+    if (!res.ok && body.think !== undefined) {
+      const txt = await res.text();
+      if (/think/i.test(txt)) res = await post(c, base, running.signal);
+      else throw httpError(res.status, txt, c);
+    }
+  } catch (err) {
+    running = null;
+    if (err && err.name === "AbortError") throw err;
+    throw reachError(err, c);
+  }
+  if (!res.ok) { const t = await res.text(); running = null; throw httpError(res.status, t, c); }
+
+  let raw = "";
+  const reader = res.body.getReader(), dec = new TextDecoder();
+  let buf = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop();
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t) continue;
+        let j; try { j = JSON.parse(t); } catch (e) { continue; }
+        if (j.error) throw new Error(j.error);
+        const piece = (j.message && j.message.content) || "";
+        if (piece) { raw += piece; onProgress && onProgress(raw.length); }
+        if (j.done) break;
+      }
+    }
+  } finally { running = null; }
+
+  const parsed = extractJson(raw);
+  if (!parsed) {
+    throw new Error("The model did not return usable JSON. Try again, or pick a larger model - " +
+                    "smaller ones sometimes drift out of the required format.");
+  }
+  return normalise(parsed);
+}
+
+function post(c, body, signal) {
+  return fetch(c.url.replace(/\/+$/, "") + "/api/chat", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body), signal: signal
+  });
+}
+function httpError(status, text, c) {
+  if (status === 404) {
+    return new Error("Ollama does not have \"" + c.model + "\". Pull it first:  ollama pull " + c.model);
+  }
+  return new Error("Ollama answered " + status + (text ? ": " + String(text).slice(0, 200) : ""));
+}
+function reachError(err, c) {
+  return new Error(
+    "Could not reach Ollama at " + c.url + ". Check that it is running (ollama serve), and if this " +
+    "page is not served from localhost, allow this origin:  set OLLAMA_ORIGINS=" + location.origin);
+}
+function stop() { if (running) { running.abort(); running = null; } }
+
+/* reasoning models wrap their scratchpad in <think>; strip it before parsing */
+function extractJson(s) {
+  let t = String(s || "").replace(/<think>[\s\S]*?<\/think>/gi, "").replace(/<\/?think>/gi, "");
+  t = t.replace(/```(?:json)?/gi, "").trim();
+  const a = t.indexOf("{"), b = t.lastIndexOf("}");
+  if (a < 0 || b <= a) return null;
+  const slice = t.slice(a, b + 1);
+  try { return JSON.parse(slice); } catch (e) {}
+  /* one repair pass: models sometimes leave a trailing comma */
+  try { return JSON.parse(slice.replace(/,\s*([}\]])/g, "$1")); } catch (e) {}
+  return null;
+}
+
+const ONE_OF = (v, list, fb) => {
+  const u = String(v == null ? "" : v).toUpperCase().replace(/[–—]/g, "-").trim();
+  return list.find(x => x === u) || list.find(x => u.indexOf(x) === 0) || fb;
+};
+function normalise(j) {
+  const arr = x => Array.isArray(x) ? x : [];
+  const str = x => typeof x === "string" ? x : (x == null ? "" : String(x));
+  let score = Number(j.fit_score);
+  if (!isFinite(score)) score = 0;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  return {
+    fit_score: score,
+    interview_likelihood: ONE_OF(j.interview_likelihood,
+      ["VERY LIKELY", "LIKELY", "POSSIBLE", "UNLIKELY", "VERY UNLIKELY"], "POSSIBLE"),
+    application_recommendation: ONE_OF(j.application_recommendation,
+      ["APPLY - BUT TAILOR RESUME", "STRETCH APPLICATION", "LOW PRIORITY", "APPLY"], "STRETCH APPLICATION"),
+    one_line_verdict: str(j.one_line_verdict),
+    summary: str(j.summary),
+    strengths: arr(j.strengths).map(s => ({
+      title: str(s && s.title), explanation: str(s && s.explanation), evidence: str(s && s.evidence) })),
+    gaps: arr(j.gaps).map(g => ({
+      title: str(g && g.title), severity: ONE_OF(g && g.severity, ["HIGH", "MEDIUM", "LOW"], "MEDIUM"),
+      explanation: str(g && g.explanation), job_requirement: str(g && g.job_requirement) })),
+    requirements: arr(j.requirements).map(r => ({
+      requirement: str(r && r.requirement),
+      importance: ONE_OF(r && r.importance, ["REQUIRED", "PREFERRED"], "PREFERRED"),
+      status: ONE_OF(r && r.status, ["MATCH", "PARTIAL", "MISSING", "UNCLEAR"], "UNCLEAR"),
+      evidence: str(r && r.evidence),
+      impact: ONE_OF(r && r.impact, ["HIGH", "MEDIUM", "LOW"], "MEDIUM") })),
+    keyword_analysis: {
+      present: arr(j.keyword_analysis && j.keyword_analysis.present).map(str),
+      related_wording: arr(j.keyword_analysis && j.keyword_analysis.related_wording).map(str),
+      missing: arr(j.keyword_analysis && j.keyword_analysis.missing).map(str)
+    },
+    resume_communication_issues: arr(j.resume_communication_issues).map(str),
+    improvements: arr(j.improvements).map(i => ({
+      priority: ONE_OF(i && i.priority, ["HIGH", "MEDIUM", "LOW"], "MEDIUM"),
+      recommendation: str(i && i.recommendation), reason: str(i && i.reason) }))
+  };
+}
+
+/* =========================================================== editor pane == */
+function renderFit() {
+  const pane = $("#pane-fit");
+  if (!pane) return;
+  const c = cfg(), f = fitState();
+  const busy = !!running;
+
+  let h = "";
+  /* the published copy runs under a strict CSP that blocks every external
+     host, localhost included - say so rather than showing a network error */
+  if (window.claude && window.claude.use) {
+    h += '<div class="frow2 bad" style="border-top:0"><span class="m"><b>Not available on this copy</b>' +
+      "<small>The published page cannot reach a local model - its sandbox blocks every outside " +
+      "address. Open the copy in your resumemaker folder to use this.</small></span></div>";
+  }
+  h += '<section class="group"><h3>Job description</h3>' +
+    '<textarea class="paste" id="jdBox" style="min-height:200px" placeholder="Paste the full job posting here - requirements, responsibilities, everything.">' +
+    esc(f.jd || "") + "</textarea>" +
+    '<p class="hint" style="margin:8px 0 0">Compared against the resume you are editing. ' +
+    "Both stay on this machine.</p></section>";
+
+  h += '<section class="group"><div class="grouphead"><h3>Model</h3><span class="grow"></span>' +
+    '<button class="addlink" id="fitRefresh" style="padding:0">Refresh list</button></div>' +
+    '<select class="box" id="fitModel"><option value="' + esc(c.model) + '">' + esc(c.model) + "</option></select>" +
+    '<div class="ctl" style="border-top:0;padding-top:10px"><div class="top"><label>Ollama address</label></div>' +
+    '<input class="box" id="fitUrl" value="' + esc(c.url) + '" spellcheck="false"></div></section>';
+
+  h += '<div class="addrow">' +
+    (busy
+      ? '<button class="btn outline" id="fitStop">Stop</button>'
+      : '<button class="btn primary" id="fitRun" style="flex:1;justify-content:center">Analyse fit</button>') +
+    (f.result && !busy ? '<button class="btn outline" id="fitClear">Clear</button>' : "") +
+  "</div>";
+
+  if (f.error) {
+    h += '<div class="frow2 bad" style="border-top:0"><span class="m"><b>Could not analyse</b>' +
+      "<small>" + esc(f.error) + "</small></span></div>";
+  }
+  if (f.result) {
+    h += '<p class="hint">Last run: ' + esc(f.model) +
+      (f.secs ? " · took " + esc(f.secs) + "s" : "") + " · " +
+      esc(new Date(f.at).toLocaleString()) + "</p>";
+  }
+  h += '<p class="hint" style="margin-top:4px">Runs on your machine through Ollama. ' +
+    "A model without GPU offload is slow: a 7B took about ten minutes here, so try a 4B if that bites.</p>";
+  pane.innerHTML = h;
+}
+
+/* =========================================================== the report == */
+const STAT = { MATCH: "ok", PARTIAL: "warn", MISSING: "bad", UNCLEAR: "idle" };
+
+function reportHTML(r) {
+  const band = r.fit_score >= 80 ? "ok" : r.fit_score >= 60 ? "warn" : "bad";
+  const sec = (title, body) => body ? '<section class="rep-sec"><h3>' + title + "</h3>" + body + "</section>" : "";
+
+  let h = '<div class="rep">';
+
+  h += '<header class="rep-head"><div class="rep-score ' + band + '">' +
+    "<b>" + r.fit_score + "</b><span>out of 100</span></div>" +
+    '<div class="rep-lead"><p class="verdict">' + esc(r.one_line_verdict || "No verdict returned.") + "</p>" +
+    '<div class="rep-chips">' +
+      '<span class="repchip ' + band + '">' + esc(r.application_recommendation) + "</span>" +
+      '<span class="repchip idle">Interview: ' + esc(r.interview_likelihood) + "</span>" +
+    "</div></div></header>";
+
+  if (r.summary) h += '<p class="rep-summary">' + esc(r.summary) + "</p>";
+
+  if (r.requirements.length) {
+    const rows = r.requirements.map(q =>
+      '<div class="req"><span class="reqdot ' + (STAT[q.status] || "idle") + '"></span>' +
+      '<div class="reqmain"><b>' + esc(q.requirement) + "</b>" +
+      (q.evidence ? "<small>" + esc(q.evidence) + "</small>" : "") + "</div>" +
+      '<span class="reqtag">' + esc(q.importance) + "</span>" +
+      '<span class="reqstat ' + (STAT[q.status] || "idle") + '">' + esc(q.status) + "</span></div>").join("");
+    const counts = ["MATCH", "PARTIAL", "MISSING", "UNCLEAR"]
+      .map(s => ({ s: s, n: r.requirements.filter(x => x.status === s).length }))
+      .filter(x => x.n)
+      .map(x => '<span class="repchip ' + (STAT[x.s] || "idle") + '">' + x.n + " " + x.s.toLowerCase() + "</span>").join("");
+    h += sec("Requirements", '<div class="rep-chips" style="margin-bottom:10px">' + counts + "</div>" +
+             '<div class="reqlist">' + rows + "</div>");
+  }
+
+  if (r.strengths.length) {
+    h += sec("Strengths", '<div class="cardlist">' + r.strengths.map(s =>
+      '<div class="repcard"><b>' + esc(s.title) + "</b>" +
+      (s.explanation ? "<p>" + esc(s.explanation) + "</p>" : "") +
+      (s.evidence ? '<q>' + esc(s.evidence) + "</q>" : "") + "</div>").join("") + "</div>");
+  }
+  if (r.gaps.length) {
+    h += sec("Gaps", '<div class="cardlist">' + r.gaps.map(g =>
+      '<div class="repcard"><div class="cardtop"><b>' + esc(g.title) + "</b>" +
+      '<span class="repchip ' + (g.severity === "HIGH" ? "bad" : g.severity === "MEDIUM" ? "warn" : "idle") +
+      '">' + esc(g.severity) + "</span></div>" +
+      (g.explanation ? "<p>" + esc(g.explanation) + "</p>" : "") +
+      (g.job_requirement ? '<q>' + esc(g.job_requirement) + "</q>" : "") + "</div>").join("") + "</div>");
+  }
+  if (r.improvements.length) {
+    const order = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+    const list = r.improvements.slice().sort((a, b) => order[a.priority] - order[b.priority]);
+    h += sec("What would help most", '<div class="cardlist">' + list.map(i =>
+      '<div class="repcard"><div class="cardtop"><b>' + esc(i.recommendation) + "</b>" +
+      '<span class="repchip ' + (i.priority === "HIGH" ? "bad" : i.priority === "MEDIUM" ? "warn" : "idle") +
+      '">' + esc(i.priority) + "</span></div>" +
+      (i.reason ? "<p>" + esc(i.reason) + "</p>" : "") + "</div>").join("") + "</div>");
+  }
+
+  const k = r.keyword_analysis;
+  if (k.present.length || k.related_wording.length || k.missing.length) {
+    const col = (t, list, cls) => list.length
+      ? "<div><h4>" + t + "</h4><div class=\"kws\">" +
+        list.map(x => '<span class="kw ' + cls + '">' + esc(x) + "</span>").join("") + "</div></div>"
+      : "";
+    h += sec("Keywords", '<div class="kwcols">' +
+      col("Present", k.present, "ok") + col("Different wording", k.related_wording, "warn") +
+      col("Missing", k.missing, "bad") + "</div>");
+  }
+  if (r.resume_communication_issues.length) {
+    h += sec("How the resume reads", "<ul class=\"replist\">" +
+      r.resume_communication_issues.map(x => "<li>" + esc(x) + "</li>").join("") + "</ul>");
+  }
+
+  h += '<p class="rep-foot">Generated locally by ' + esc(fitState().model || cfg().model) +
+    ". A model's judgement is not a recruiter's - treat it as a second opinion.</p>";
+  return h + "</div>";
+}
+
+function renderReport() {
+  const host = $("#report");
+  if (!host) return;
+  const f = fitState();
+  if (running) {
+    host.innerHTML = '<div class="rep-wait"><b>Analysing against the job description</b>' +
+      '<span id="fitProg">Starting the model' + String.fromCharCode(8230) + "</span></div>";
+    return;
+  }
+  if (f.result) { host.innerHTML = reportHTML(f.result); return; }
+  host.innerHTML = '<div class="rep-wait"><b>No analysis yet</b>' +
+    "<span>Paste a job description on the left and press Analyse fit.</span></div>";
+}
+
+/* =========================================================== wiring ====== */
+document.addEventListener("click", async e => {
+  const t = e.target;
+  if (t.closest && t.closest("#fitRun")) {
+    const f = fitState();
+    f.error = "";
+    const started = Date.now();
+    renderFit(); RG.setCanvasMode("fit"); renderReport();
+    try {
+      const res = await analyse(n => {
+        const p = $("#fitProg");
+        if (p) p.textContent = n.toLocaleString() + " characters so far";
+      });
+      f.result = res; f.model = cfg().model; f.at = Date.now(); f.error = "";
+      f.secs = Math.round((Date.now() - started) / 1000);
+    } catch (err) {
+      if (!(err && err.name === "AbortError")) f.error = err && err.message ? err.message : String(err);
+      else f.error = "Stopped.";
+    }
+    running = null;
+    RG.save(true); renderFit(); renderReport();
+    return;
+  }
+  if (t.closest && t.closest("#fitStop")) { stop(); return; }
+  if (t.closest && t.closest("#fitClear")) {
+    const f = fitState(); f.result = null; f.error = ""; f.at = 0;
+    RG.save(true); renderFit(); renderReport(); return;
+  }
+  if (t.closest && t.closest("#fitRefresh")) {
+    const sel = $("#fitModel");
+    try {
+      const names = await listModels();
+      const c = cfg();
+      if (!names.length) { sel.innerHTML = '<option value="">no models pulled</option>'; return; }
+      if (names.indexOf(c.model) < 0) names.unshift(c.model);
+      sel.innerHTML = names.map(n => '<option value="' + esc(n) + '"' +
+        (n === c.model ? " selected" : "") + ">" + esc(n) + "</option>").join("");
+    } catch (err) {
+      const f = fitState();
+      f.error = reachError(err, cfg()).message;
+      renderFit();
+    }
+  }
+});
+
+document.addEventListener("input", e => {
+  const t = e.target;
+  if (t.id === "jdBox") { fitState().jd = t.value; RG.save(); }
+  else if (t.id === "fitUrl") { cfg().url = t.value.trim() || DEFAULTS.url; RG.save(); }
+});
+document.addEventListener("change", e => {
+  if (e.target.id === "fitModel") { cfg().model = e.target.value; RG.save(); }
+});
+
+RG.renderFit = renderFit;
+RG.renderReport = renderReport;
+RG.fitBusy = () => !!running;
+
+/* core booted before this module existed, so draw our own panes now */
+renderFit();
+renderReport();
 
 })();
 </script>

@@ -839,8 +839,21 @@ function renderFiles() {
   $("#pane-files").innerHTML = h;
 }
 
+let canvasMode = "paper";
+function setCanvasMode(m) {
+  canvasMode = m;
+  const paper = m === "paper";
+  $("#pages").hidden = !paper;
+  $("#report").hidden = paper;
+  $("#docStat").style.visibility = paper ? "" : "hidden";
+  const z = $(".zoom");
+  if (z) z.style.visibility = paper ? "" : "hidden";
+  if (paper) fit();
+}
+
 function renderAll() {
   renderEditor(); renderDesign(); renderFiles(); renderPreview();
+  if (RG.renderFit) RG.renderFit();
   const f = activeEntry();
   if (f) $("#docName").textContent = f.name || "Untitled resume";
 }
@@ -1089,6 +1102,9 @@ $("#pane-files").addEventListener("keydown", e => {
 $$(".tab").forEach(t => t.addEventListener("click", () => {
   $$(".tab").forEach(x => x.setAttribute("aria-selected", String(x === t)));
   $$(".pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + t.dataset.pane));
+  /* the left pane decides what the right pane is for */
+  setCanvasMode(t.dataset.pane === "fit" ? "fit" : "paper");
+  if (t.dataset.pane === "fit" && RG.renderReport) RG.renderReport();
 }));
 $$(".mobnav button").forEach(b => b.addEventListener("click", () => {
   $$(".mobnav button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
@@ -1207,7 +1223,8 @@ window.RG = {
   renderEditor, renderPreview, renderFiles, renderDesign, renderAll,
   syncDesignUI: renderDesign, save, blankDoc, starterDoc, migrate,
   TYPES, uid, openModal, closeModal, $, $$, esc, ask, fmtDate, fmtRange,
-  newFile, setActiveName, activeEntry, firstVisit, flashSaved
+  newFile, setActiveName, activeEntry, firstVisit, flashSaved,
+  setCanvasMode, libRef: () => lib
 };
 applyTheme();
 renderAll();
