@@ -101,35 +101,92 @@ Note the `.docx` export always puts headings above their section rather than
 beside it — Word's two-column layouts read badly to applicant tracking systems.
 Use **PDF** when the side-heading look matters.
 
-## Job fit
+## Job Match
 
-The **Job fit** tab compares the resume you are editing against a pasted job
-description using a model running locally through [Ollama](https://ollama.com).
-Nothing leaves the machine: the resume and the posting go to
-`http://localhost:11434` and nowhere else.
+Compares the resume you are editing against a pasted job description and tells
+you honestly how well you match. The analysis runs on a model you host yourself
+through [Ollama](https://ollama.com) — never a hosted API.
 
-```bash
+### Architecture
+
+```
+browser  ->  /api/analyze-job  ->  Ollama  ->  qwen3:8b
+             (server-side only)
+```
+
+The browser never talks to Ollama and never learns where it is. `OLLAMA_BASE_URL`
+and `OLLAMA_MODEL` are read only inside the API route, so the same build works
+against `http://localhost:11434` locally and against a tunnelled endpoint on
+Vercel with no code change.
+
+### Configuration
+
+Copy `.env.example` to `.env.local` for local work, and set the same names in
+Vercel's project settings for the deployment. Never prefix them with
+`NEXT_PUBLIC_` — that would publish them to the browser.
+
+```
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen3:8b
+OLLAMA_TIMEOUT_MS=55000
+```
+
+Models to pull (`qwen3:8b` is the default and the better analyst; `gemma3:4b` is
+much faster):
+
+```
 ollama pull qwen3:8b
+ollama pull gemma3:4b
 ```
 
-Use `qwen3:4b` instead on a machine without GPU offload - a 7B model on CPU took
-about ten minutes for one report here, a 4B is far quicker. Any installed model
-works; **Refresh list** reads what Ollama actually has.
+### Speed matters more than you would expect
 
-The report gives a fit score, every requirement marked MATCH / PARTIAL / MISSING
-/ UNCLEAR, strengths and gaps with severity, keyword coverage, and improvements
-ranked by impact. The prompt is deliberately unflattering: keyword overlap is not
-evidence, coursework and projects are not professional experience, and a missing
-required qualification costs far more than a missing preferred one.
+Measured on the machine this was built on, which has no GPU offload — Ollama
+reported `vram 0.0GB`, so everything ran on CPU:
 
-This only works where the page can reach localhost - the local `index.html`, or a
-copy served from localhost. The published web copy cannot: its sandbox blocks
-outside addresses, and it says so in the tab. If you serve the app from some
-other origin, allow it:
+| Model | One analysis |
+| --- | --- |
+| qwen2.5:7b | about 10 minutes |
+| qwen2.5:3b | about 7 minutes |
 
-```bash
-set OLLAMA_ORIGINS=http://localhost:4321
+**A Vercel function stops at 60 seconds** (Hobby; 300s on Pro). Streaming keeps
+the connection alive but does not extend that limit, so on hardware this slow the
+deployed route will hit the cap and report a timeout rather than an answer. Two
+ways around it:
+
+- **Run it locally**, where `OLLAMA_TIMEOUT_MS` can be as large as you like:
+  `node src/server.js`, then open <http://localhost:4321>.
+- **Point `OLLAMA_BASE_URL` at a machine with GPU offload** and use `gemma3:4b`.
+
+### Running locally
+
 ```
+node src/server.js
+```
+
+That serves the app and mounts the same `/api/analyze-job` handler Vercel runs,
+so local and deployed behave identically. Opening `index.html` straight from the
+file system gives you the editor but not Job Match — there is no server for it to
+call, and the panel says so instead of failing silently.
+
+### What it returns
+
+A score out of 100 with a plain label, a one-line verdict, a requirement
+breakdown (MATCH / PARTIAL / MISSING / UNCLEAR, each with its evidence), where
+you match, where you fall short split into required, preferred and minor gaps,
+the recruiter verdict, an application recommendation, and improvements ranked by
+impact.
+
+The prompt is deliberately unflattering: keyword overlap is not evidence,
+coursework and personal projects are not professional employment, a missing
+required qualification visibly costs score, and a result below 50 is a normal
+outcome. Run against a deliberately mismatched posting it returned 48 both times.
+
+The route validates both fields, caps their size, strips `<think>` blocks,
+attempts one JSON repair, and normalises every field before replying. Failures
+come back as plain sentences — unreachable, timeout, missing model — with no
+stack traces and no endpoint in the message. Nothing is stored server-side; the
+analysis lives in your browser alongside the resume until you clear it.
 
 ## Deleting
 
@@ -145,13 +202,15 @@ Either way the toast that follows carries an **Undo** for about 12 seconds.
 ```
 index.html   the app - open this
 app.html     same app, body-only, for publishing as an Artifact
+api/         analyze-job.js (Vercel function) + shared _lib/analyze.js
 src/         source parts; edit these, then run src/build.sh
   01-style.html   tokens, layout, print rules
   02-markup.html  page structure
   03-core.html    state, editor, live preview
   04-io.html      import parsing, docx/txt/json export
+  05-fit.html     Job Match panel and report (calls /api/analyze-job)
   build.sh        joins the parts into app.html + index.html
-  server.js       optional local server (node src/server.js) on :4321
+  server.js       dev server: static files plus the /api/analyze-job route
   make-fixtures.js    regenerates test/ sample .docx and plain .pdf
   make-subset-pdf.js  regenerates the subset-font PDF fixtures
   make-layout-pdf.js  regenerates the right-aligned-dates layout fixture
