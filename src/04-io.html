@@ -1,0 +1,1601 @@
+
+<script>
+/* ============================================================================
+   Resume Galley - reading files in, writing files out
+   ========================================================================== */
+(function () {
+"use strict";
+
+const RG = window.RG;
+const { $, $$, esc, uid, TYPES } = RG;
+
+/* ------------------------------------------------------------- helpers ---- */
+function toast(msg, kind, action) {
+  let t = $("#toast");
+  if (!t) {
+    t = document.createElement("div");
+    t.id = "toast";
+    t.style.cssText = "position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:200;" +
+      "background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px 9px 15px;" +
+      "box-shadow:var(--shadow);font-size:13px;max-width:min(520px,92vw);line-height:1.45;display:none;" +
+      "align-items:center;gap:10px";
+    t.innerHTML = '<span></span>';
+    document.body.appendChild(t);
+  }
+  t.style.borderColor = kind === "bad" ? "var(--mark-line)" : "var(--line)";
+  t.firstChild.textContent = msg;
+  const old = $("#toastBtn", t);
+  if (old) old.remove();
+  if (action) {
+    const b = document.createElement("button");
+    b.id = "toastBtn"; b.className = "btn sm"; b.textContent = action.label;
+    b.style.flex = "none";
+    b.addEventListener("click", () => { hide(); action.fn(); });
+    t.appendChild(b);
+  }
+  const hide = () => { t.style.display = "none"; clearTimeout(t._h); };
+  t.style.display = "flex";
+  clearTimeout(t._h);
+  t._h = setTimeout(hide, action ? 12000 : 5200);
+}
+
+async function inflate(bytes, mode) {
+  const ds = new DecompressionStream(mode);
+  const stream = new Blob([bytes]).stream().pipeThrough(ds);
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/* ============================================================================
+   READING .docx  -  a docx is a zip; we pull word/document.xml out of it
+   ========================================================================== */
+async function readDocx(buf) {
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+
+  /* end-of-central-directory record, scanning back from the tail */
+  let eocd = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 66000); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("That file is not a readable Word document.");
+
+  const count = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  let target = null;
+
+  for (let n = 0; n < count; n++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true);
+    const csize = dv.getUint32(p + 20, true);
+    const nameLen = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const cmtLen = dv.getUint16(p + 32, true);
+    const local = dv.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(u8.subarray(p + 46, p + 46 + nameLen));
+    if (name === "word/document.xml") { target = { method, csize, local }; break; }
+    p += 46 + nameLen + extraLen + cmtLen;
+  }
+  if (!target) throw new Error("No document body found inside that Word file.");
+
+  /* local header tells us where the bytes actually start */
+  const lNameLen = dv.getUint16(target.local + 26, true);
+  const lExtraLen = dv.getUint16(target.local + 28, true);
+  const start = target.local + 30 + lNameLen + lExtraLen;
+  const raw = u8.subarray(start, start + target.csize);
+  const xml = new TextDecoder().decode(
+    target.method === 0 ? raw : await inflate(raw, "deflate-raw")
+  );
+  return docxXmlToText(xml);
+}
+
+function docxXmlToText(xml) {
+  const body = (xml.split("<w:body")[1] || xml);
+  const paras = body.split(/<w:p[ >]/).slice(1);
+  const out = [];
+  for (const p of paras) {
+    const isBullet = /<w:numPr[ >\/]/.test(p) || /<w:pStyle[^>]*w:val="[^"]*(ListParagraph|ListBullet)/i.test(p);
+    let text = p
+      .replace(/<w:tab\/>/g, "\t")
+      .replace(/<w:br\/>/g, "\n")
+      .replace(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g, (m, t) => t)
+      .replace(/<[^>]+>/g, "");
+    text = decodeEnt(text).replace(/\u00A0/g, " ").replace(/[ \t]+$/g, "");
+    if (isBullet && text.trim()) text = "- " + text.trim();
+    out.push(text);
+  }
+  return out.join("\n");
+}
+
+function decodeEnt(s) {
+  return s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+          .replace(/&#(\d+);/g, (m, d) => String.fromCharCode(+d))
+          .replace(/&#x([0-9a-f]+);/gi, (m, d) => String.fromCharCode(parseInt(d, 16)));
+}
+
+/* ============================================================================
+   READING .pdf
+
+   Character codes inside a PDF are glyph numbers, not letters. Any file whose
+   fonts are subset-embedded (Canva, InDesign, most design tools) therefore
+   reads as mojibake unless you translate the codes through the font's
+   /ToUnicode CMap. So: index the objects, pull every font's CMap, follow the
+   Tf operator to know which font is speaking, and map each code back.
+   ========================================================================== */
+async function readPdf(buf) {
+  const u8 = new Uint8Array(buf);
+  const raw = latin(u8);
+
+  const objs = indexObjects(raw);
+  await expandObjectStreams(objs, u8, raw);
+  const fonts = await collectFonts(objs, u8, raw);
+
+  const chunks = [];
+  for (const o of objs.values()) {
+    if (o.streamStart < 0 || o.fromObjStm) continue;
+    if (/\/Type\s*\/(ObjStm|XRef|Font|Metadata)\b/.test(o.dict)) continue;
+    if (/\/Subtype\s*\/(Image|Type1C|TrueType|CIDFontType0C|XML)\b/.test(o.dict)) continue;
+    if (/\/(DCTDecode|JPXDecode|CCITTFaxDecode)\b/.test(o.dict)) continue;
+    const bytes = await streamBytes(objs, o, u8, raw);
+    if (!bytes) continue;
+    const text = latin(bytes);
+    if (/(\bTj\b|\bTJ\b|\bTd\b|\bTm\b)/.test(text)) chunks.push(text);
+  }
+  if (!chunks.length) {
+    throw new Error("No readable text layer in that PDF - it may be a scan or an image export.");
+  }
+  /* "mapped" means codes were actually translated through a CMap - a Type0
+     font with no /ToUnicode counts as unmapped, because its codes are lost */
+  let mapped = false;
+  for (const f of fonts.values()) if (f && f.map && f.map.size) { mapped = true; break; }
+  let text = chunks.map(c => pdfOps(c, fonts)).join("\n\n");
+
+  /* A design tool writes "LinkedIn" as a word and hides the address in a link
+     annotation, so the URL never reaches the text. Put them back on the
+     contact line, where you can see them before importing. */
+  const uris = collectUris(objs);
+  if (uris.length) {
+    const ls = text.split("\n");
+    const i = ls.findIndex(l => EMAIL.test(l));
+    if (i >= 0) ls[i] = ls[i].replace(/\s+$/, "") + " | " + uris.join(" | ");
+    else ls.unshift(uris.join(" | "));
+    text = ls.join("\n");
+  }
+  return { text, mapped };
+}
+
+/* link annotations: /A << /S /URI /URI (https://...) >> */
+function collectUris(objs) {
+  const out = [];
+  for (const o of objs.values()) {
+    const re = /\/URI\s*\(\s*([^()]{4,400}?)\s*\)/g;
+    let m;
+    while ((m = re.exec(o.dict))) {
+      let u = m[1].replace(/\\(.)/g, "$1").trim();
+      if (!/^https?:\/\//i.test(u)) continue;
+      u = u.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+      if (u.length > 110 || out.indexOf(u) >= 0) continue;
+      out.push(u);
+      if (out.length >= 6) return out;
+    }
+  }
+  return out;
+}
+
+/* ---- object index: every "N 0 obj ... endobj" in the file ---- */
+function indexObjects(raw) {
+  const objs = new Map();
+  const re = /(\d+)\s+(\d+)\s+obj\b/g;
+  let m;
+  while ((m = re.exec(raw))) {
+    const num = +m[1];
+    const start = m.index + m[0].length;
+    const end = raw.indexOf("endobj", start);
+    const body = raw.slice(start, end < 0 ? Math.min(raw.length, start + 200000) : end);
+    const sIdx = body.search(/\bstream\r?\n?/);
+    let dict = body, streamStart = -1;
+    if (sIdx >= 0) {
+      dict = body.slice(0, sIdx);
+      let d = start + sIdx + 6;
+      if (raw[d] === "\r") d++;
+      if (raw[d] === "\n") d++;
+      streamStart = d;
+    }
+    objs.set(num, { num, dict, streamStart, fromObjStm: false });
+  }
+  return objs;
+}
+
+/* ---- PDF 1.5+ packs objects inside compressed object streams ---- */
+async function expandObjectStreams(objs, u8, raw) {
+  for (const o of Array.from(objs.values())) {
+    if (!/\/Type\s*\/ObjStm\b/.test(o.dict)) continue;
+    let bytes;
+    try { bytes = await streamBytes(objs, o, u8, raw); } catch (e) { continue; }
+    if (!bytes) continue;
+    const body = latin(bytes);
+    const n = +((o.dict.match(/\/N\s+(\d+)/) || [])[1] || 0);
+    const first = +((o.dict.match(/\/First\s+(\d+)/) || [])[1] || 0);
+    if (!n || !first) continue;
+    const head = body.slice(0, first).trim().split(/\s+/).map(Number);
+    for (let i = 0; i < n; i++) {
+      const num = head[i * 2], off = head[i * 2 + 1];
+      if (!Number.isFinite(num) || !Number.isFinite(off)) continue;
+      const nextOff = i + 1 < n ? head[i * 2 + 3] : body.length - first;
+      const dict = body.slice(first + off, first + (Number.isFinite(nextOff) ? nextOff : body.length));
+      if (!objs.has(num)) objs.set(num, { num, dict, streamStart: -1, fromObjStm: true });
+    }
+  }
+}
+
+async function streamBytes(objs, o, u8, raw) {
+  if (o.streamStart < 0) return null;
+  let len = -1;
+  const lm = o.dict.match(/\/Length\s+(\d+)(\s+\d+\s+R)?/);
+  if (lm) {
+    if (lm[2]) {
+      const ref = objs.get(+lm[1]);
+      const n = ref && ref.dict.match(/(\d+)/);
+      if (n) len = +n[1];
+    } else len = +lm[1];
+  }
+  let end;
+  if (len >= 0 && o.streamStart + len <= u8.length) end = o.streamStart + len;
+  else {
+    end = raw.indexOf("endstream", o.streamStart);
+    if (end < 0) return null;
+    while (end > o.streamStart && (u8[end - 1] === 10 || u8[end - 1] === 13)) end--;
+  }
+  let bytes = u8.subarray(o.streamStart, end);
+  if (/\/FlateDecode\b/.test(o.dict)) {
+    let ok = null;
+    for (const mode of ["deflate", "deflate-raw"]) {
+      try { ok = await inflate(bytes, mode); break; } catch (e) { /* try the other */ }
+    }
+    if (!ok) return null;
+    bytes = ok;
+  }
+  return bytes;
+}
+
+/* ---- resource name (/F1) -> {map, width} for every font in the file ---- */
+async function collectFonts(objs, u8, raw) {
+  const fonts = new Map();
+  const cache = new Map();
+
+  for (const o of objs.values()) {
+    let fontDict = subDict(o.dict, "/Font");
+    if (!fontDict) {
+      const ref = o.dict.match(/\/Font\s+(\d+)\s+\d+\s+R/);
+      if (ref && objs.get(+ref[1])) fontDict = objs.get(+ref[1]).dict;
+    }
+    if (!fontDict) continue;
+    const re = /\/([A-Za-z0-9#+._-]+)\s+(\d+)\s+\d+\s+R/g;
+    let m;
+    while ((m = re.exec(fontDict))) {
+      const name = m[1], num = +m[2];
+      if (fonts.has(name)) continue;
+      if (!cache.has(num)) cache.set(num, await readFont(objs, num, u8, raw));
+      const f = cache.get(num);
+      if (f) fonts.set(name, f);
+    }
+  }
+  return fonts;
+}
+
+async function readFont(objs, num, u8, raw) {
+  const fo = objs.get(num);
+  if (!fo) return null;
+  const wide = /\/Subtype\s*\/Type0\b/.test(fo.dict) || /\/Encoding\s*\/Identity-[HV]\b/.test(fo.dict);
+  const tu = fo.dict.match(/\/ToUnicode\s+(\d+)\s+\d+\s+R/);
+  if (!tu) return wide ? { map: null, width: 2 } : null;
+  const co = objs.get(+tu[1]);
+  if (!co) return wide ? { map: null, width: 2 } : null;
+  let bytes;
+  try { bytes = await streamBytes(objs, co, u8, raw); } catch (e) { return null; }
+  if (!bytes) return null;
+  const cmap = latin(bytes);
+  const map = parseCMap(cmap);
+  let width = wide ? 2 : 1;
+  const cs = cmap.match(/begincodespacerange([\s\S]*?)endcodespacerange/);
+  if (cs) {
+    const f = cs[1].match(/<([0-9A-Fa-f]+)>/);
+    if (f) width = Math.max(1, Math.round(f[1].length / 2));
+  }
+  return map.size ? { map, width } : (wide ? { map: null, width: 2 } : null);
+}
+
+/* ---- the CMap itself: bfchar pairs and bfrange runs ---- */
+function parseCMap(text) {
+  const map = new Map();
+  let m, re;
+
+  re = /beginbfchar([\s\S]*?)endbfchar/g;
+  while ((m = re.exec(text))) {
+    const pr = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]*)>/g;
+    let p;
+    while ((p = pr.exec(m[1]))) map.set(parseInt(p[1], 16), hexToStr(p[2]));
+  }
+
+  re = /beginbfrange([\s\S]*?)endbfrange/g;
+  while ((m = re.exec(text))) {
+    let body = m[1];
+    /* array form first: <lo> <hi> [ <d> <d> ... ] */
+    const ar = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([\s\S]*?)\]/g;
+    let a;
+    while ((a = ar.exec(body))) {
+      const lo = parseInt(a[1], 16);
+      const items = a[3].match(/<[0-9A-Fa-f]*>/g) || [];
+      items.forEach((it, i) => map.set(lo + i, hexToStr(it.slice(1, -1))));
+    }
+    body = body.replace(ar, " ");
+    /* run form: <lo> <hi> <dst>, incrementing dst across the run */
+    const rr = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]*)>/g;
+    while ((a = rr.exec(body))) {
+      const lo = parseInt(a[1], 16), hi = parseInt(a[2], 16), dst = a[3];
+      if (hi < lo || hi - lo > 65535) continue;
+      for (let c = lo; c <= hi; c++) map.set(c, hexToStr(bumpHex(dst, c - lo)));
+    }
+  }
+  return map;
+}
+
+function hexToStr(h) {
+  h = (h || "").replace(/\s/g, "");
+  let s = "";
+  for (let i = 0; i + 3 < h.length + 1 && i + 4 <= h.length; i += 4) {
+    s += String.fromCharCode(parseInt(h.substr(i, 4), 16));
+  }
+  if (!s && h.length >= 2) s = String.fromCharCode(parseInt(h.substr(0, 2), 16));
+  return s;
+}
+function bumpHex(dst, delta) {
+  if (!delta) return dst;
+  if (dst.length < 4) return dst;
+  const head = dst.slice(0, dst.length - 4);
+  const tail = (parseInt(dst.slice(-4), 16) + delta) & 0xFFFF;
+  return head + tail.toString(16).padStart(4, "0");
+}
+
+function latin(bytes) {
+  let s = "", n = bytes.length;
+  for (let i = 0; i < n; i += 8192) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 8192, n)));
+  }
+  return s;
+}
+
+/* find "key << ... >>" and return the balanced inner dictionary */
+function subDict(src, key) {
+  let from = 0;
+  for (;;) {
+    const i = src.indexOf(key, from);
+    if (i < 0) return null;
+    const j = src.indexOf("<<", i);
+    if (j < 0) return null;
+    if (src.slice(i + key.length, j).trim() === "") {
+      let depth = 0;
+      for (let k = j; k < src.length - 1; k++) {
+        if (src[k] === "<" && src[k + 1] === "<") { depth++; k++; }
+        else if (src[k] === ">" && src[k + 1] === ">") {
+          depth--; k++;
+          if (!depth) return src.slice(j, k + 1);
+        }
+      }
+      return null;
+    }
+    from = i + key.length;
+  }
+}
+
+/* ---- walk the content stream, keeping track of WHERE each run lands ------
+   Two things make naive extraction produce mush. Text is placed by the text
+   matrix AND the graphics matrix (q/Q/cm), so ignoring the second one stacks
+   every block on the same line and interleaves them character by character.
+   And a file that positions each glyph separately has no spaces to find, so
+   the gaps have to be measured against a believable glyph width. */
+
+function pdfOps(content, fonts) {
+  let text = linesFrom(collectRuns(content, fonts, false));
+  /* Some files encode no spaces at all and lean on kerning to separate words.
+     Only in that case is it safe to read big kerns as spaces - doing it always
+     chops wide letters out of the middle of words ("prom otional"). */
+  const spaces = (text.match(/ /g) || []).length;
+  if (spaces < text.replace(/\s/g, "").length / 12) {
+    const alt = linesFrom(collectRuns(content, fonts, true));
+    if ((alt.match(/ /g) || []).length > spaces) text = alt;
+  }
+  return tidyLines(text);
+}
+
+/* Undo the things a two-column, letter-spaced layout does to a line. */
+function tidyLines(text) {
+  const out = [];
+  for (let line of text.split("\n")) {
+    const shouty = !/[a-z]/.test(line);
+    /* tracking in a heading opens gaps inside its own words: "W ORK" */
+    if (shouty) line = line.replace(/\b([A-Z])\s+(?=[A-Z]{2,})/g, "$1");
+    /* the same happens to a spaced-out year: "20 26" */
+    if (/^[\d\s]+$/.test(line) && line.replace(/\s/g, "").length <= 4) line = line.replace(/\s+/g, "");
+
+    /* a heading parked in a narrow left column shares its line with the body
+       text beside it - give the heading its own line back */
+    const m = line.match(/^(.{2,26}?)\s{3,}(\S.*)$/);
+    if (m && !/[a-z]/.test(m[1]) && /[A-Z]{3}/.test(m[1])) {
+      out.push(m[1].trim());
+      out.push(m[2].trim());
+      continue;
+    }
+    out.push(line);
+  }
+
+  /* a heading too wide for its column wraps: "WORK" then "EXPERIENCE" */
+  for (let i = 0; i < out.length - 1; i++) {
+    const a = out[i].trim(), b = out[i + 1].trim();
+    if (a && b && a.length < 18 && b.length < 18 &&
+        /^[A-Z][A-Z &]*$/.test(a) && /^[A-Z][A-Z &]*$/.test(b)) {
+      out[i] = a + " " + b;
+      out.splice(i + 1, 1);
+    }
+  }
+  return out.join("\n");
+}
+
+/* [a b c d e f]: m applied first, then n */
+function mul(m, n) {
+  return [
+    m[0] * n[0] + m[1] * n[2],
+    m[0] * n[1] + m[1] * n[3],
+    m[2] * n[0] + m[3] * n[2],
+    m[2] * n[1] + m[3] * n[3],
+    m[4] * n[0] + m[5] * n[2] + n[4],
+    m[4] * n[1] + m[5] * n[3] + n[5]
+  ];
+}
+const IDENT = [1, 0, 0, 1, 0, 0];
+
+function collectRuns(content, fonts, kernSpaces) {
+  const runs = [];
+  let stack = [];
+  let ctm = IDENT.slice(), ctmStack = [];
+  let tm = IDENT.slice(), tlm = IDENT.slice();
+  let leading = 0, fsize = 10, font = null;
+
+  const TOK = /\((?:\\[\s\S]|[^\\()])*\)|<[0-9A-Fa-f\s]*>|\[(?:[^\][\\]|\\[\s\S])*\]|\/[^\s\/<>\[\]{}()]+|[-+]?[\d.]+|T\*|'|"|[A-Za-z]{1,3}\d?\*?/g;
+  const num = i => parseFloat(stack[stack.length - i]);
+  const six = () => {
+    const v = [];
+    for (let i = 6; i >= 1; i--) v.push(num(i));
+    return v.every(isFinite) ? v : null;
+  };
+  const place = text => {
+    if (!text) return;
+    const trm = mul(tm, ctm);
+    const scale = Math.sqrt(Math.abs(trm[0] * trm[3] - trm[1] * trm[2])) || 1;
+    runs.push({ x: trm[4], y: trm[5], size: Math.abs(fsize * scale) || 10, text, d3: trm[3] });
+  };
+  const nextLine = () => { tlm = mul([1, 0, 0, 1, 0, -leading], tlm); tm = tlm.slice(); };
+
+  let m;
+  while ((m = TOK.exec(content))) {
+    const t = m[0], c = t[0];
+    if (c === "(" || c === "<" || c === "[" || c === "/" ||
+        c === "-" || c === "+" || c === "." || (c >= "0" && c <= "9")) {
+      stack.push(t);
+      if (stack.length > 10) stack.shift();
+      continue;
+    }
+
+    switch (t) {
+      case "q": ctmStack.push(ctm.slice()); break;
+      case "Q": if (ctmStack.length) ctm = ctmStack.pop(); break;
+      case "cm": { const v = six(); if (v) ctm = mul(v, ctm); break; }
+
+      case "BT": tm = IDENT.slice(); tlm = IDENT.slice(); break;
+      case "Tm": { const v = six(); if (v) { tlm = v; tm = v.slice(); } break; }
+      case "Td": {
+        const a = num(2), b = num(1);
+        if (isFinite(a) && isFinite(b)) { tlm = mul([1, 0, 0, 1, a, b], tlm); tm = tlm.slice(); }
+        break;
+      }
+      case "TD": {
+        const a = num(2), b = num(1);
+        if (isFinite(a) && isFinite(b)) {
+          leading = -b;
+          tlm = mul([1, 0, 0, 1, a, b], tlm); tm = tlm.slice();
+        }
+        break;
+      }
+      case "TL": { const a = num(1); if (isFinite(a)) leading = a; break; }
+      case "T*": nextLine(); break;
+      case "Tf": {
+        const a = num(1);
+        if (isFinite(a) && a !== 0) fsize = a;
+        const nm = stack[stack.length - 2];
+        if (nm && nm[0] === "/") font = fonts.get(nm.slice(1)) || null;
+        break;
+      }
+      case "Tj": case "'": case '"': {
+        if (t !== "Tj") nextLine();
+        const s = lastOf(stack, ch => ch === "(" || ch === "<");
+        if (s) place(decodeStr(s, font));
+        break;
+      }
+      case "TJ": {
+        const arr = lastOf(stack, ch => ch === "[");
+        if (arr) place(decodeTJ(arr, font, kernSpaces));
+        break;
+      }
+    }
+    stack = [];
+  }
+  return runs.filter(r => r.text);
+}
+
+function lastOf(stack, test) {
+  for (let i = stack.length - 1; i >= 0; i--) if (test(stack[i][0])) return stack[i];
+  return null;
+}
+
+function decodeTJ(tok, font, kernSpaces) {
+  const parts = tok.slice(1, -1)
+    .match(/\((?:\\[\s\S]|[^\\()])*\)|<[0-9A-Fa-f\s]*>|-?[\d.]+/g) || [];
+  let s = "";
+  for (const p of parts) {
+    if (p[0] === "(" || p[0] === "<") s += decodeStr(p, font);
+    else if (kernSpaces && parseFloat(p) < -190 && s && !/\s$/.test(s)) s += " ";
+  }
+  return s;
+}
+
+/* rough glyph widths in em - enough to tell a real gap from a wide letter */
+const NARROW = "iljtfIr.,;:'\"|!()[]{}-";
+const WIDEC = "mMWw@%";
+function charW(ch) {
+  if (ch === " ") return 0.28;
+  if (NARROW.indexOf(ch) >= 0) return 0.30;
+  if (WIDEC.indexOf(ch) >= 0) return 0.83;
+  if (ch >= "A" && ch <= "Z") return 0.68;
+  return 0.53;
+}
+function runWidth(text) {
+  let w = 0;
+  for (const ch of text) w += charW(ch);
+  return w;
+}
+
+/* one visual line per group of runs sharing a baseline */
+function groupRows(runs, topDown) {
+  const sorted = runs.slice().sort((a, b) => (topDown ? a.y - b.y : b.y - a.y) || (a.x - b.x));
+  const rows = [];
+  let cur = null;
+  for (const r of sorted) {
+    const tol = Math.max(1.2, (r.size || 10) * 0.32);
+    if (!cur || Math.abs(cur.y - r.y) > tol) { cur = { y: r.y, parts: [] }; rows.push(cur); }
+    cur.parts.push(r);
+  }
+  return rows.map(row => {
+    row.parts.sort((a, b) => a.x - b.x);
+    /* if the runs carry their own spaces, trust them and only mark the wide
+       gaps; guessing extra ones is what breaks words after m, w and W */
+    const spaced = row.parts.some(p => /\s/.test(p.text));
+    let s = "", end = null;
+    for (const p of row.parts) {
+      const em = p.size || 10;
+      if (end !== null) {
+        const gap = p.x - end;
+        if (gap > em * 1.1) s += "   ";
+        else if (!spaced && gap > em * 0.16 && !/\s$/.test(s) && !/^\s/.test(p.text)) s += " ";
+      }
+      s += p.text;
+      end = p.x + runWidth(p.text) * em;
+    }
+    return { y: row.y, size: row.parts[0].size || 10, text: s.replace(/\s+$/, "") };
+  }).filter(r => r.text.trim());
+}
+
+/* Many resumes park their section headings in a narrow left rail. Those
+   headings sit beside the block they introduce rather than above it, so
+   reading strictly by y drops them into the middle of the section. Find the
+   rail, and put each heading back in front of the block it belongs to. */
+function findRail(runs) {
+  const xs = Array.from(new Set(runs.map(r => Math.round(r.x)))).sort((a, b) => a - b);
+  if (xs.length < 8) return 0;
+  const sizes = runs.map(r => r.size || 10).sort((a, b) => a - b);
+  const med = sizes[Math.floor(sizes.length / 2)] || 10;
+  const span = xs[xs.length - 1] - xs[0];
+  let cut = 0, widest = 0;
+  for (let i = 1; i < xs.length; i++) {
+    if (xs[i - 1] - xs[0] > span * 0.4) break;
+    const gap = xs[i] - xs[i - 1];
+    if (gap > widest) { widest = gap; cut = (xs[i] + xs[i - 1]) / 2; }
+  }
+  return widest > med * 2 ? cut : 0;
+}
+
+function linesFrom(runs) {
+  if (!runs.length) return "";
+  /* PDF pages count y upward, but design tools lay out top-down and flip the
+     matrix to compensate. A negative vertical component in the text matrix is
+     that flip, and it means the page reads in increasing y, not decreasing. */
+  let flipped = 0;
+  for (const r of runs) if (r.d3 < 0) flipped++;
+  const topDown = flipped * 2 > runs.length;
+
+  const cut = findRail(runs);
+  if (cut) {
+    const railRuns = runs.filter(r => r.x < cut);
+    const bodyRuns = runs.filter(r => r.x >= cut);
+    if (railRuns.length >= 3 && bodyRuns.length > railRuns.length) {
+      const railRows = groupRows(railRuns, topDown);
+      const shouty = railRows.filter(r => !/[a-z]/.test(r.text)).length;
+      if (shouty >= railRows.length * 0.6) {
+        /* a heading too wide for the rail wraps onto a second line */
+        const heads = [];
+        for (const r of railRows) {
+          const prev = heads[heads.length - 1];
+          if (prev && Math.abs(r.y - prev.y) < r.size * 2.2) {
+            prev.text += " " + r.text;
+            prev.y = topDown ? Math.min(prev.y, r.y) : Math.max(prev.y, r.y);
+          } else heads.push({ y: r.y, size: r.size, text: r.text });
+        }
+        const body = groupRows(bodyRuns, topDown);
+        const out = [];
+        let i = 0;
+        for (const h of heads) {
+          const slack = h.size * 1.6;
+          const before = by => topDown ? by < h.y - slack : by > h.y + slack;
+          while (i < body.length && before(body[i].y)) out.push(body[i++].text);
+          out.push(h.text);
+        }
+        while (i < body.length) out.push(body[i++].text);
+        return out.join("\n");
+      }
+    }
+  }
+  return groupRows(runs, topDown).map(r => r.text).join("\n");
+}
+function decodeStr(tok, font) {
+  const bytes = tok[0] === "("
+    ? pdfStrBytes(tok.slice(1, -1))
+    : hexBytes(tok.slice(1, -1));
+  const width = font && font.width === 2 ? 2 : 1;
+  const codes = [];
+  if (width === 2) for (let i = 0; i + 1 < bytes.length; i += 2) codes.push((bytes[i] << 8) | bytes[i + 1]);
+  else for (const b of bytes) codes.push(b);
+
+  let s = "";
+  for (const c of codes) {
+    if (font && font.map) {
+      if (font.map.has(c)) s += font.map.get(c);
+      /* a code the font never maps is padding or an artefact - better dropped
+         than turned into a box character */
+    } else {
+      s += String.fromCharCode(c);
+    }
+  }
+  return s;
+}
+function hexBytes(s) {
+  const h = s.replace(/\s/g, "");
+  const out = [];
+  for (let i = 0; i + 1 < h.length; i += 2) out.push(parseInt(h.substr(i, 2), 16));
+  if (h.length % 2) out.push(parseInt(h[h.length - 1] + "0", 16));
+  return out;
+}
+
+function pdfStrBytes(s) {
+  const out = [];
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c !== "\\") { out.push(s.charCodeAt(i) & 0xFF); continue; }
+    const n = s[++i];
+    if (n === undefined) break;
+    if (/[0-7]/.test(n)) {
+      let oct = n;
+      while (oct.length < 3 && /[0-7]/.test(s[i + 1] || "")) oct += s[++i];
+      out.push(parseInt(oct, 8) & 0xFF);
+    } else if (n === "n") out.push(10);
+    else if (n === "r") out.push(13);
+    else if (n === "t") out.push(9);
+    else if (n === "b") out.push(8);
+    else if (n === "f") out.push(12);
+    else if (n === "\n" || n === "\r") { /* line continuation */ }
+    else out.push(s.charCodeAt(i) & 0xFF);
+  }
+  return out;
+}
+
+/* ============================================================================
+   PARSING plain text into sections
+   ========================================================================== */
+const VOCAB = [
+  [/^(professional\s+)?summary$|^profile$|^objective$|^about( me)?$|^personal statement$|^career (summary|objective|profile)$/, "summary"],
+  [/experience|employment|work history|career history|professional background|positions? held/, "experience"],
+  [/education|academic|qualification|schooling/, "education"],
+  [/^(technical |core |key |professional )?(skills|competenc|expertise|proficienc|strengths)/, "skills"],
+  [/project|portfolio|selected work/, "projects"],
+  [/certificat|licen[cs]e|accreditation|award|honou?r|achievement|training|courses?$/, "awards"],
+  [/language|interest|hobb|reference/, "list"],
+  [/publication|volunteer|activit|leadership|extracurricular|affiliation|memberships?/, "custom"]
+];
+const BULLET = /^\s*(?:[-•‣·◦*▪–—o]\s+|\d{1,2}[.)]\s+)/;
+const MON = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?";
+const DATE1 = "(?:" + MON + "\\s*,?\\s*\\d{2,4}|\\d{1,2}[\\/.]\\d{2,4}|\\b(?:19|20)\\d{2}\\b)";
+const NOW = "(?:present|current(?:ly)?|now|to date|ongoing|till date)";
+const RANGE = new RegExp("(" + DATE1 + ")\\s*(?:[-–—]{1,2}|\\bto\\b|\\buntil\\b)\\s*(" + DATE1 + "|" + NOW + ")", "i");
+const LONE = new RegExp("^\\s*(" + DATE1 + ")\\s*$", "i");
+/* a date pushed to the right of the line by a column gap */
+const RIGHTDATE = new RegExp(
+  "\\s{2,}\\(?(" + DATE1 + ")(?:\\s*(?:[-–—]{1,2}|\\bto\\b)\\s*(?:" + DATE1 + "|" + NOW + "))?\\)?\\s*$", "i");
+const EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/;
+const PHONE = /(?:\+?\d[\d\s().-]{7,}\d)/;
+const LINKRE = /((?:https?:\/\/)?(?:www\.)?(?:linkedin\.com|github\.com|gitlab\.com|behance\.net|dribbble\.com|medium\.com|twitter\.com|x\.com|[\w-]+\.(?:com|net|org|io|dev|me|co|lk))(?:\/[\w#!:.?+=&%@!\-\/]*)?)/i;
+
+function headingType(line) {
+  const t = line.trim().replace(/[:：]\s*$/, "").replace(/[_=*—–-]{3,}/g, "").trim();
+  if (!t || t.length > 55 || BULLET.test(line)) return null;
+  if (/[.!?,;]$/.test(t)) return null;
+  if (EMAIL.test(t) || RANGE.test(t)) return null;
+  /* "Languages: Sinhala, English" is a line of content, not a heading */
+  if (/^[^:]{1,32}:\s*\S/.test(t)) return null;
+  const low = t.toLowerCase();
+  const words = t.split(/\s+/).length;
+  for (const [re, type] of VOCAB) {
+    if (re.test(low) && words <= 6) return { type, title: tidyTitle(t), byVocab: true };
+  }
+  /* an all-caps short line is a heading in almost every resume template - but
+     it is also how most people set their own name, so byVocab tells them apart */
+  if (words <= 5 && t === t.toUpperCase() && /[A-Z]{3}/.test(t) && !/\d{4}/.test(t)) {
+    return { type: "custom", title: tidyTitle(t), byVocab: false };
+  }
+  return null;
+}
+/* "LinkedIn | Github | | Bengaluru, India" is a city with link labels around it */
+function cleanLocation(s) {
+  return s.split(/\s*[|•·]\s*/).map(x => x.trim()).filter(Boolean)
+    .filter(x => !/^(linked ?in|git ?hub|gitlab|portfolio|website|behance|dribbble|resume|cv|email|phone|mobile)$/i.test(x))
+    /* a place name has a capital and usually a space; leftovers like "drive."
+       are the tail of a stripped web address, not a city */
+    .filter(x => /[A-Z]/.test(x) && !/[\/?=]/.test(x))
+    .join(", ").replace(/\s{2,}/g, " ").trim();
+}
+
+function tidyTitle(t) {
+  if (t !== t.toUpperCase()) return t;
+  return t.toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase());
+}
+
+function splitHead(str) {
+  const parts = str.split(/\s*[|\u2022\u00B7]\s*|\t+|\s{3,}|\s+[\u2013\u2014]\s+|\s+@\s+/)
+                   .map(s => s.trim()).filter(Boolean);
+  /* nothing split it, but "Product Designer, Acme Inc." still has two halves */
+  if (parts.length === 1 && (parts[0].match(/,/g) || []).length === 1) {
+    const two = parts[0].split(",").map(s => s.trim()).filter(Boolean);
+    if (two.length === 2 && two[0].length > 2 && two[1].length > 2) return two;
+  }
+  return parts;
+}
+
+function parseResume(text) {
+  const d = RG.blankDoc();
+  const raw = text.replace(/\r\n?/g, "\n").replace(/\u00A0/g, " ").split("\n");
+  const flat = [];
+  for (const l of raw) {
+    const t = l.replace(/\s+$/, "");
+    if (!t.trim() && flat.length && !flat[flat.length - 1].trim()) continue;
+    flat.push(t);
+  }
+
+  /* A PDF gives you one entry per visual line, so a sentence that wrapped
+     arrives as two. A line opening in lower case is the tail of the one above,
+     never the start of something new - stitch it back on. */
+  const lines = [];
+  for (const l of flat) {
+    const t = l.trim();
+    const prev = lines.length ? lines[lines.length - 1] : "";
+    const p = prev.trim();
+    /* a line left hanging on a comma, a conjunction or a hyphen is unfinished,
+       whatever case the next line happens to start in */
+    const hyphen = /[‐-―-]$/.test(p);
+    const open = hyphen || /,$/.test(p) ||
+      /\b(and|or|with|using|the|of|to|in|for|at|on|by|from|a|an|as|into)$/i.test(p);
+    const tail = /^[a-z,;:)–—-]/.test(t);
+
+    /* contact details are their own lines, never the tail of the one above -
+       an email address starting in lower case must not glue onto your name */
+    const contact = EMAIL.test(t) || PHONE.test(t) || LINKRE.test(t) ||
+                    EMAIL.test(p) || PHONE.test(p) || LINKRE.test(p);
+
+    if (t && p && (tail || open) && p.length > 12 && !contact &&
+        !BULLET.test(l) && !headingType(t) && !headingType(p) &&
+        !RANGE.test(t) && !RIGHTDATE.test(t) && !/[.!?]$/.test(p)) {
+      lines[lines.length - 1] = hyphen ? p + t : p + " " + t;
+      continue;
+    }
+    lines.push(l);
+  }
+
+  /* ---- header: name, then anything contact-shaped near the top ---- */
+  let cursor = 0;
+  const contactUsed = new Set();
+  for (let i = 0; i < Math.min(lines.length, 12); i++) {
+    const t = lines[i].trim();
+    if (!t) continue;
+    /* an ALL-CAPS first line is the person's name, not a section heading -
+       only a real section word ends the header block */
+    const h = headingType(t);
+    if (h && (d.header.name || h.byVocab)) break;
+    if (!d.header.name && !EMAIL.test(t) && !PHONE.test(t) && t.split(/\s+/).length <= 5 &&
+        /[A-Za-z]/.test(t) && !/\d/.test(t)) {
+      d.header.name = tidyTitle(t).replace(/\s{2,}/g, " ");
+      contactUsed.add(i); cursor = i + 1;
+      continue;
+    }
+    if (d.header.name) {
+      /* peel off each piece before looking for the next, so the domain inside
+         an email address is never mistaken for a personal website */
+      const em = t.match(EMAIL);
+      const noEmail = em ? t.replace(EMAIL, " ") : t;
+      const ph = noEmail.match(PHONE);
+      const noPhone = ph ? noEmail.replace(PHONE, " ") : noEmail;
+      const ur = noPhone.match(LINKRE);
+      if (em || ph || ur) {
+        if (em && !d.header.email) d.header.email = em[0];
+        if (ph && !d.header.phone) d.header.phone = ph[0].trim();
+        if (ur) {
+          const u = ur[0].replace(/^https?:\/\//, "").replace(/\/$/, "");
+          const label = /linkedin/i.test(u) ? "LinkedIn" : /github/i.test(u) ? "GitHub" :
+                        /behance/i.test(u) ? "Behance" : /dribbble/i.test(u) ? "Dribbble" : "Website";
+          if (!d.header.links.some(l => l.url === u)) d.header.links.push({ label, url: u });
+        }
+        /* whatever is left over on the line is usually the city */
+        const rest = cleanLocation((ur ? noPhone.replace(LINKRE, " ") : noPhone));
+
+        if (rest && rest.length < 40 && !d.header.location && /[A-Za-z]/.test(rest)) d.header.location = rest;
+        contactUsed.add(i); cursor = i + 1;
+      } else if (!d.header.headline && t.length < 70 && i - 1 >= 0 && contactUsed.has(i - 1) &&
+                 !RANGE.test(t) && !RIGHTDATE.test(t) && !/\d{4}/.test(t)) {
+        d.header.headline = t; contactUsed.add(i); cursor = i + 1;
+      }
+    }
+  }
+
+  /* Design tools often draw the contact line as its own object, which can land
+     anywhere in the file rather than under the name - so look for it document
+     wide before giving up on an email address. */
+  if (!d.header.email) {
+    for (let i = 0; i < lines.length; i++) {
+      const t = lines[i].trim();
+      if (!t || !EMAIL.test(t) || headingType(t)) continue;
+      const em = t.match(EMAIL);
+      let rest = t.replace(EMAIL, " ");
+      const ph = rest.match(PHONE);
+      if (ph) { d.header.phone = d.header.phone || ph[0].trim(); rest = rest.replace(PHONE, " "); }
+      d.header.email = em[0];
+      for (let n = 0; n < 4; n++) {
+        const ur = rest.match(LINKRE);
+        if (!ur) break;
+        const u = ur[0].replace(/^https?:\/\//, "").replace(/\/$/, "");
+        rest = rest.replace(LINKRE, " ");
+        const label = /linkedin/i.test(u) ? "LinkedIn" : /github/i.test(u) ? "GitHub" :
+                      /behance/i.test(u) ? "Behance" : "Website";
+        if (!d.header.links.some(l => l.url === u)) d.header.links.push({ label, url: u });
+      }
+      const left = cleanLocation(rest);
+      if (left && left.length < 40 && !d.header.location && /[A-Za-z]/.test(left)) d.header.location = left;
+      lines[i] = "";
+      break;
+    }
+  }
+
+  /* ---- carve the rest into heading-led blocks ---- */
+  const blocks = [];
+  let curBlock = null;
+  for (let i = cursor; i < lines.length; i++) {
+    const t = lines[i];
+    const h = t.trim() ? headingType(t) : null;
+    if (h) { curBlock = { type: h.type, title: h.title, lines: [] }; blocks.push(curBlock); continue; }
+    if (!curBlock) {
+      if (!t.trim()) continue;
+      curBlock = { type: "summary", title: "Summary", lines: [] };
+      blocks.push(curBlock);
+    }
+    curBlock.lines.push(t);
+  }
+
+  if (!blocks.length) {
+    if (text.trim()) {
+      d.sections.push({ id: uid(), type: "list", title: "Imported text", on: true, _open: true,
+        lines: lines.filter(l => l.trim()).map(l => l.replace(BULLET, "").trim()) });
+    }
+    return d;
+  }
+
+  for (const b of blocks) {
+    const body = b.lines.join("\n").trim();
+    if (!body) continue;
+    const sec = { id: uid(), type: b.type, title: b.title, on: true, _open: false };
+
+    if (b.type === "summary") {
+      sec.text = b.lines.map(l => l.replace(BULLET, "").trim()).filter(Boolean).join(" ")
+                        .replace(/\s{2,}/g, " ");
+    } else if (b.type === "skills") {
+      sec.groups = parseSkills(b.lines);
+    } else if (b.type === "list") {
+      sec.lines = b.lines.map(l => l.replace(BULLET, "").trim()).filter(Boolean);
+    } else {
+      sec.items = parseItems(b.lines, b.type);
+      if (!sec.items.length) {
+        sec.type = "list";
+        sec.lines = b.lines.map(l => l.replace(BULLET, "").trim()).filter(Boolean);
+      }
+    }
+    d.sections.push(sec);
+  }
+  if (d.sections.length) d.sections[0]._open = true;
+  return d;
+}
+
+function parseSkills(lines) {
+  const groups = [];
+  const loose = [];
+  for (const l of lines) {
+    const t = l.replace(BULLET, "").trim();
+    if (!t) continue;
+    const m = t.match(/^([A-Za-z][A-Za-z0-9 &\/+.-]{1,34})\s*[:：]\s*(.+)$/);
+    if (m) groups.push({ id: uid(), label: m[1].trim(), text: m[2].trim() });
+    else loose.push(t);
+  }
+  if (loose.length) {
+    const joined = loose.join(", ").replace(/,\s*,/g, ",").replace(/\s{2,}/g, " ");
+    groups.push({ id: uid(), label: groups.length ? "Also" : "", text: joined });
+  }
+  return groups.length ? groups : [{ id: uid(), label: "", text: "" }];
+}
+
+function parseItems(lines, type) {
+  const t = TYPES[type];
+  const raw = [];
+  let cur = null;
+  const start = () => { cur = { head: [], bullets: [] }; raw.push(cur); return cur; };
+
+  /* Word files mark their bullets; PDFs usually draw the dot as a graphic, so
+     the text arrives as bare lines. Without markers, the dated line is what
+     starts a job - everything after it is that job's detail, not a new job. */
+  const marked = lines.some(l => BULLET.test(l));
+
+  for (const line of lines) {
+    const s = line.trim();
+    if (!s) continue;
+
+    if (BULLET.test(line)) {
+      if (!cur) start();
+      cur.bullets.push(s.replace(BULLET, "").trim());
+      continue;
+    }
+
+    if (!marked) {
+      /* a date sitting on its own at the end of the line is the right-aligned
+         one from the layout, which is exactly what marks a new entry */
+      const dated = RANGE.test(s) || LONE.test(s) || RIGHTDATE.test(s);
+      const titleish = s.length < 62 && !/[.;]$/.test(s);
+      /* plenty of resumes put the title on one line and the employer plus its
+         dates on the next - that second line completes the entry, it does not
+         begin another. Only a date after the entry already has one does. */
+      const already = cur && cur.head.some(h => RANGE.test(h) || LONE.test(h) || RIGHTDATE.test(h));
+      if (!cur) start();
+      else if (dated && (already || cur.bullets.length)) start();
+      else if (cur.bullets.length) { cur.bullets.push(s); continue; }
+      else if (cur.head.length >= 2 || !titleish) { cur.bullets.push(s); continue; }
+      cur.head.push(s);
+      continue;
+    }
+
+    if (!cur || cur.bullets.length || cur.head.length >= 3 ||
+        (cur.head.length >= 2 && RANGE.test(cur.head.join(" ")))) start();
+    cur.head.push(s);
+  }
+
+  return raw.filter(r => r.head.length || r.bullets.length).map(r => {
+    const it = { id: uid(), _open: false, bullets: r.bullets.filter(Boolean) };
+    (t.fields || []).forEach(f => (it[f.k] = ""));
+
+    let head = r.head.join(" | ");
+    const m = head.match(RANGE);
+    if (m) {
+      head = head.replace(m[0], " | ").trim();
+      if (t.single) it[t.single] = m[1];
+      else { it.start = cap(m[1]); it.end = cap(m[2]); }
+    } else {
+      const one = head.match(new RegExp("\\(?\\b(" + DATE1 + "|" + NOW + ")\\b\\)?", "i"));
+      if (one) {
+        head = head.replace(one[0], " | ").trim();
+        if (t.single) it[t.single] = cap(one[1]);
+        else it.end = cap(one[1]);
+      }
+    }
+
+    const parts = splitHead(head).filter(p => p && p !== "|");
+    const keys = [t.primary, t.org, t.meta].filter(Boolean);
+    parts.forEach((p, i) => {
+      const k = keys[i];
+      if (k && !it[k]) it[k] = p;
+      else if (i >= keys.length && "sub" in it && !it.sub) it.sub = p;
+    });
+    return it;
+  }).filter(it => Object.keys(it).some(k => k !== "id" && k !== "_open" && k !== "bullets" && it[k]) || it.bullets.length);
+}
+function cap(s) {
+  s = (s || "").trim();
+  return /^(present|current|currently|now|to date|ongoing|till date)$/i.test(s)
+    ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
+}
+
+/* ============================================================================
+   IMPORT wiring
+
+   Every document you bring in becomes its own saved resume in the Files tab,
+   so importing a second one never costs you the first. Drop several at once
+   and you get one file each.
+   ========================================================================== */
+const scrim = $("#importScrim"), drop = $("#dropZone"), fileInput = $("#fileInput");
+const paste = $("#pasteBox"), note = $("#importNote"), noteText = $("#importNoteText");
+const fileList = $("#fileList");
+let pending = [];          /* one entry per document waiting to be read in */
+
+function showNote(html, kind) {
+  note.hidden = false;
+  note.className = "note" + (kind ? " " + kind : "");
+  noteText.innerHTML = html;
+}
+function destMode() {
+  const b = $('#segDest button[aria-pressed="true"]');
+  return b ? b.dataset.v : "new";
+}
+function baseName(n) {
+  return String(n || "").replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+}
+
+drop.addEventListener("click", () => fileInput.click());
+drop.addEventListener("keydown", e => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
+});
+["dragenter", "dragover"].forEach(ev =>
+  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev =>
+  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => takeFiles(e.dataTransfer.files));
+fileInput.addEventListener("change", () => takeFiles(fileInput.files));
+
+async function takeFiles(list) {
+  const files = Array.from(list || []).slice(0, 12);
+  if (!files.length) return;
+  showNote("Reading " + files.length + " file" + (files.length === 1 ? "" : "s") + "&hellip;");
+  pending = [];
+  for (const f of files) pending.push(await readOne(f));
+  renderPending();
+}
+
+async function readOne(file) {
+  const name = file.name, low = name.toLowerCase();
+  try {
+    if (low.endsWith(".json")) {
+      const d = RG.migrate(JSON.parse(await file.text()));
+      if (!d.sections) throw new Error("That JSON file is not a Resume Galley backup.");
+      return { name, doc: d, note: "Backup read &mdash; <b>" + d.sections.length + " sections</b>.", tone: "ok" };
+    }
+    if (low.endsWith(".docx")) {
+      if (!("DecompressionStream" in window)) {
+        throw new Error("This browser cannot unzip Word files. Paste the text instead.");
+      }
+      const text = await readDocx(await file.arrayBuffer());
+      return Object.assign({ name, text }, grade(text, "Word"));
+    }
+    if (low.endsWith(".pdf")) {
+      const r = await readPdf(await file.arrayBuffer());
+      return Object.assign({ name, text: r.text }, grade(r.text, "PDF", r.mapped));
+    }
+    if (low.endsWith(".doc")) {
+      throw new Error("Old .doc files cannot be read here. Open it in Word, save as .docx, and try again.");
+    }
+    const text = await file.text();
+    return Object.assign({ name, text }, grade(text, "Text"));
+  } catch (err) {
+    return { name, text: "", failed: true, tone: "warn",
+             note: esc(err && err.message ? err.message : "Could not read that file.") };
+  }
+}
+
+/* an honest read on how well the extraction went, before anything is imported */
+function grade(txt, kind, mapped) {
+  const letters = (txt.match(/[A-Za-z]/g) || []).length;
+  let junk = 0;
+  for (let i = 0; i < txt.length; i++) {
+    const c = txt.charCodeAt(i);
+    if (c === 0xFFFD || c < 9 || (c > 13 && c < 32)) junk++;
+  }
+  const words = txt.split(/\s+/).filter(w => /^[A-Za-z][a-z]{2,}$/.test(w)).length;
+  const scrambled = junk > 20 || words < 25;
+  const bulk = txt.trim().length;
+  /* plenty of characters but hardly any letters means an encoding problem,
+     which is a different story from a page that holds no text at all */
+  const unreadable = letters < Math.min(60, bulk / 4);
+
+  if (bulk < 40) {
+    return { tone: "warn", note: "Barely any text came out &mdash; that file is probably an " +
+      "image or a scan. Paste the text in instead." };
+  }
+  if ((unreadable || scrambled) && kind === "PDF" && mapped === false) {
+    return { tone: "warn", note: "This PDF embeds its fonts without a character map, so the " +
+      "letters cannot be recovered from the file itself. <b>Paste your text over the box " +
+      "below</b>, or save the resume as <b>.docx</b> and import that instead." };
+  }
+  if (unreadable || scrambled) {
+    return { tone: "warn", note: kind + " text came out scrambled. <b>Fix it in the box below, " +
+      "or paste clean text over it</b> before importing." };
+  }
+  return { tone: "ok", note: kind + " file read &mdash; <b>" + words + " words</b>" +
+    (kind === "PDF" && mapped ? ", decoded through the embedded font map" : "") + "." };
+}
+
+/* one file goes to the review box; several are listed instead */
+function renderPending() {
+  const many = pending.length > 1;
+  fileList.hidden = !many;
+  $("#pasteWrap").hidden = many;
+
+  if (!many) {
+    const p = pending[0];
+    paste.value = p && p.text ? p.text : "";
+    showNote((p ? p.note : "") + (p && !p.failed && !p.doc ?
+      " Skim the box below, then press <b>Read it in</b>." : ""), p ? p.tone : "");
+    return;
+  }
+
+  const ok = pending.filter(p => !p.failed && p.tone !== "warn").length;
+  fileList.innerHTML = pending.map(p =>
+    '<div class="fitem' + (p.tone === "warn" ? " bad" : "") + '">' +
+      '<span class="fdot"' + (p.tone === "warn" ? ' data-off="1"' : "") + '></span>' +
+      '<span class="fname"><b>' + esc(p.name) + "</b><small>" + p.note + "</small></span>" +
+    "</div>"
+  ).join("");
+  showNote("<b>" + pending.length + " files read</b>, " + ok + " cleanly. Each one is saved as " +
+    "its own resume in the Files tab.", ok === pending.length ? "ok" : "warn");
+}
+
+$("#segDest").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  $$("#segDest button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+});
+
+$("#btnParse").addEventListener("click", () => {
+  const dest = destMode();
+
+  /* several documents always land as separate resumes - there is nothing
+     sensible to replace them all with */
+  if (pending.length > 1) {
+    /* built back to front: each new file goes on top of the list, so working
+       backwards leaves them in the order you dropped them, and the one you
+       end up editing is the first of them rather than the last */
+    const made = [];
+    for (let i = pending.length - 1; i >= 0; i--) {
+      const p = pending[i];
+      if (p.failed) continue;
+      const d = p.doc || parseResume(p.text);
+      if (!d) continue;
+      made.unshift(RG.newFile(nameFor(d, p.name), d).name);
+    }
+    finishImport();
+    if (!made.length) { showNote("None of those files could be read.", "warn"); return; }
+    toast("Saved " + made.length + " resumes. Now editing " + made[0] +
+          " - switch to any of the others in the Files tab.");
+    return;
+  }
+
+  const one = pending[0];
+  let incoming;
+  if (one && one.doc) incoming = one.doc;
+  else {
+    const txt = paste.value;
+    if (!txt.trim()) { showNote("Nothing to read yet &mdash; choose a file or paste your text.", "warn"); return; }
+    incoming = parseResume(txt);
+  }
+  const srcName = one ? one.name : "";
+
+  if (dest === "new") {
+    const f = RG.newFile(nameFor(incoming, srcName), incoming);
+    finishImport();
+    const n = RG.doc.sections.length;
+    toast("Saved as a new resume: " + f.name + " (" + n + " section" + (n === 1 ? "" : "s") +
+          "). Your other files are untouched.");
+    return;
+  }
+
+  /* replacing or merging touches the resume you are on, so keep a way back */
+  const previous = JSON.parse(JSON.stringify(RG.doc));
+  const prevName = RG.activeEntry().name;
+  const doc = RG.doc;
+  if (dest === "replace") {
+    doc.header = incoming.header;
+    doc.sections = incoming.sections;
+    RG.setActiveName(nameFor(incoming, srcName));
+  } else {
+    incoming.sections.forEach(s => doc.sections.push(s));
+    ["name", "headline", "email", "phone", "location"].forEach(k => {
+      if (!doc.header[k] && incoming.header[k]) doc.header[k] = incoming.header[k];
+    });
+    incoming.header.links.forEach(l => {
+      if (!doc.header.links.some(x => x.url === l.url)) doc.header.links.push(l);
+    });
+  }
+  finishImport();
+  const n = RG.doc.sections.length;
+  toast((dest === "replace" ? "Replaced " : "Added to ") + RG.activeEntry().name +
+        " - " + n + " section" + (n === 1 ? "" : "s") + " now.",
+    null, { label: "Undo import", fn: () => restore(previous, "Import undone.", prevName) });
+});
+
+function nameFor(d, srcName) {
+  return ((d.header && d.header.name) || "").trim() || baseName(srcName) || "Imported resume";
+}
+/* Always reopen on "save as a new resume". Remembering a one-off choice to
+   replace would quietly overwrite the next document you bring in. */
+function resetImport() {
+  pending = [];
+  paste.value = "";
+  fileList.innerHTML = "";
+  fileList.hidden = true;
+  $("#pasteWrap").hidden = false;
+  note.hidden = true;
+  fileInput.value = "";
+  $$("#segDest button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === "new")));
+}
+RG.resetImport = resetImport;
+
+function finishImport() {
+  resetImport();
+  RG.closeModal("#importScrim");
+  RG.renderEditor(); RG.syncDesignUI(); RG.renderPreview(); RG.save(true); RG.renderFiles();
+}
+
+function restore(snapshot, msg, name) {
+  RG.doc = RG.migrate(snapshot);
+  if (name) RG.setActiveName(name);
+  RG.renderEditor(); RG.syncDesignUI(); RG.renderPreview(); RG.save(true); RG.renderFiles();
+  toast(msg);
+}
+/* ============================================================================
+   WRITING files out
+   ========================================================================== */
+function crcTable() {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+    t[i] = c >>> 0;
+  }
+  return t;
+}
+const CRC = crcTable();
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+/* zip with stored (uncompressed) entries - Word opens these happily */
+function zip(files) {
+  const enc = new TextEncoder();
+  const parts = [], central = [];
+  let offset = 0;
+  for (const f of files) {
+    const nameB = enc.encode(f.name);
+    const data = enc.encode(f.data);
+    const crc = crc32(data);
+    const lh = new Uint8Array(30 + nameB.length);
+    const dv = new DataView(lh.buffer);
+    dv.setUint32(0, 0x04034b50, true); dv.setUint16(4, 20, true); dv.setUint16(6, 0, true);
+    dv.setUint16(8, 0, true); dv.setUint16(10, 0, true); dv.setUint16(12, 0x21, true);
+    dv.setUint32(14, crc, true); dv.setUint32(18, data.length, true); dv.setUint32(22, data.length, true);
+    dv.setUint16(26, nameB.length, true); dv.setUint16(28, 0, true);
+    lh.set(nameB, 30);
+    parts.push(lh, data);
+
+    const ch = new Uint8Array(46 + nameB.length);
+    const cv = new DataView(ch.buffer);
+    cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true); cv.setUint16(10, 0, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0x21, true);
+    cv.setUint32(16, crc, true); cv.setUint32(20, data.length, true); cv.setUint32(24, data.length, true);
+    cv.setUint16(28, nameB.length, true);
+    cv.setUint32(42, offset, true);
+    ch.set(nameB, 46);
+    central.push(ch);
+    offset += lh.length + data.length;
+  }
+  let cLen = 0; central.forEach(c => (cLen += c.length));
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+  ev.setUint32(12, cLen, true); ev.setUint32(16, offset, true);
+
+  let total = offset + cLen + 22;
+  const out = new Uint8Array(total);
+  let p = 0;
+  parts.forEach(a => { out.set(a, p); p += a.length; });
+  central.forEach(a => { out.set(a, p); p += a.length; });
+  out.set(eocd, p);
+  return out;
+}
+
+const xe = s => String(s == null ? "" : s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+function buildDocx() {
+  const doc = RG.doc, d = doc.design;
+  const px2tw = px => Math.round(px * 15);          /* 96dpi px -> twips */
+  const mg = px2tw(d.mg);
+  const pageW = d.paper === "a4" ? 11906 : 12240;
+  const pageH = d.paper === "a4" ? 16838 : 15840;
+  const contentW = pageW - mg * 2;
+  const k = d.scale / 100;
+  const sz = pt => Math.round(pt * 2 * k);          /* half-points */
+  const acc = d.accent.replace("#", "").toUpperCase();
+  const face = d.face === "sans" ? "Segoe UI" : d.face === "times" ? "Times New Roman" : "Georgia";
+  const lineRule = Math.round(d.lead * 2.4);
+
+  const P = (runs, o) => {
+    o = o || {};
+    return "<w:p><w:pPr>" +
+      (o.align ? '<w:jc w:val="' + o.align + '"/>' : "") +
+      (o.tabRight ? '<w:tabs><w:tab w:val="right" w:pos="' + contentW + '"/></w:tabs>' : "") +
+      (o.ind ? '<w:ind w:left="' + o.ind + '" w:hanging="' + (o.hang || 0) + '"/>' : "") +
+      '<w:spacing w:before="' + (o.before || 0) + '" w:after="' + (o.after === undefined ? 40 : o.after) +
+        '" w:line="' + lineRule + '" w:lineRule="auto"/>' +
+      (o.border ? '<w:pBdr><w:bottom w:val="single" w:sz="' + (o.borderW || 6) +
+        '" w:space="2" w:color="' + (o.borderC || acc) + '"/></w:pBdr>' : "") +
+      "</w:pPr>" + runs + "</w:p>";
+  };
+  const R = (text, o) => {
+    o = o || {};
+    return "<w:r><w:rPr>" +
+      '<w:rFonts w:ascii="' + face + '" w:hAnsi="' + face + '"/>' +
+      (o.b ? "<w:b/>" : "") + (o.i ? "<w:i/>" : "") +
+      (o.caps ? "<w:caps/>" : "") +
+      (o.spacing ? '<w:spacing w:val="' + o.spacing + '"/>' : "") +
+      '<w:sz w:val="' + sz(o.pt || 10.5) + '"/><w:szCs w:val="' + sz(o.pt || 10.5) + '"/>' +
+      (o.color ? '<w:color w:val="' + o.color + '"/>' : "") +
+      "</w:rPr>" +
+      String(text).split("\n").map((t, i) =>
+        (i ? "<w:br/>" : "") + '<w:t xml:space="preserve">' + xe(t) + "</w:t>").join("") +
+      "</w:r>";
+  };
+  const TAB = "<w:r><w:tab/></w:r>";
+
+  let body = "";
+  const hd = doc.header;
+  const centered = d.tpl === "classic";
+  const al = centered ? "center" : null;
+
+  if (hd.name) body += P(R(hd.name, { b: true, pt: 23 }), { align: al, after: 20 });
+  if (hd.headline) body += P(R(hd.headline, { i: true, pt: 11, color: "3D434E" }), { align: al, after: 20 });
+  const bits = [hd.email, hd.phone, hd.location].filter(Boolean)
+    .concat((hd.links || []).map(l => (l.url || l.label)).filter(Boolean));
+  if (bits.length) body += P(R(bits.join("   •   "), { pt: 9.2, color: "3D434E" }), { align: al, after: 120 });
+
+  doc.sections.forEach(sec => {
+    if (!sec.on) return;
+    const t = TYPES[sec.type];
+    const rows = [];
+
+    if (t.kind === "text" && (sec.text || "").trim()) {
+      rows.push(P(R(sec.text.trim(), { pt: 10.5 }), { after: 40 }));
+    }
+    if (t.kind === "groups") {
+      sec.groups.forEach(g => {
+        const l = (g.label || "").trim(), x = (g.text || "").trim();
+        if (!l && !x) return;
+        rows.push(P((l ? R(l + ":  ", { b: true, pt: 10 }) : "") + R(x, { pt: 10.5, color: "3D434E" }), { after: 30 }));
+      });
+    }
+    if (t.kind === "lines") {
+      (sec.lines || []).filter(x => x && x.trim()).forEach(x => {
+        rows.push(P(R("•   " + x.trim(), { pt: 10.5 }), { ind: 260, hang: 200, after: 20 }));
+      });
+    }
+    if (t.kind === "items") {
+      sec.items.forEach(it => {
+        const title = (it[t.primary] || "").trim();
+        const org = (it[t.org] || "").trim();
+        const meta = t.meta ? (it[t.meta] || "").trim() : "";
+        const when = t.single ? (it[t.single] || "").trim() : plainRange(it.start, it.end);
+        const sub = (it.sub || "").trim();
+        const buls = (it.bullets || []).filter(b => b && b.trim());
+        if (!title && !org && !when && !buls.length) return;
+
+        let line = "";
+        if (title) line += R(title, { b: true, pt: 11 });
+        if (title && org) line += R("  —  " + org, { pt: 10.4 });
+        else if (org) line += R(org, { pt: 10.4 });
+        if (when) line += TAB + R(when, { pt: 9, color: "3D434E" });
+        rows.push(P(line, { tabRight: true, after: 10, before: 60 }));
+
+        const subline = [sub, meta].filter(Boolean).join(" · ");
+        if (subline) rows.push(P(R(subline, { i: true, pt: 9.6, color: "3D434E" }), { after: 20 }));
+        buls.forEach(b => {
+          rows.push(P(R("•   " + b.trim(), { pt: 10.5 }), { ind: 260, hang: 200, after: 20 }));
+        });
+      });
+    }
+
+    if (!rows.length) return;
+    body += P(R(sec.title, { b: true, caps: true, pt: 10, spacing: 22, color: centered ? "15171B" : acc }),
+      { before: 200, after: 60, border: true, borderC: centered ? "15171B" : acc,
+        borderW: d.tpl === "modern" ? 12 : 6, align: centered ? "center" : null });
+    body += rows.join("");
+  });
+
+  const document_xml =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+    "<w:body>" + body +
+    '<w:sectPr><w:pgSz w:w="' + pageW + '" w:h="' + pageH + '"/>' +
+    '<w:pgMar w:top="' + mg + '" w:right="' + mg + '" w:bottom="' + mg + '" w:left="' + mg +
+    '" w:header="0" w:footer="0" w:gutter="0"/></w:sectPr>' +
+    "</w:body></w:document>";
+
+  return zip([
+    { name: "[Content_Types].xml", data:
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+      "</Types>" },
+    { name: "_rels/.rels", data:
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+      "</Relationships>" },
+    { name: "word/document.xml", data: document_xml }
+  ]);
+}
+
+function plainRange(a, b) {
+  a = (a || "").trim(); b = (b || "").trim();
+  const sep = RG.doc.design.dateSep === "to" ? " to " : " – ";
+  return a && b ? a + sep + b : (a || b);
+}
+
+function buildTxt() {
+  const doc = RG.doc, out = [];
+  const hd = doc.header;
+  if (hd.name) out.push(hd.name.toUpperCase(), "");
+  if (hd.headline) out.push(hd.headline);
+  const bits = [hd.email, hd.phone, hd.location]
+    .concat((hd.links || []).map(l => l.url || l.label)).filter(Boolean);
+  if (bits.length) out.push(bits.join(" | "));
+  out.push("");
+
+  doc.sections.forEach(sec => {
+    if (!sec.on) return;
+    const t = TYPES[sec.type];
+    const rows = [];
+    if (t.kind === "text" && (sec.text || "").trim()) rows.push(sec.text.trim());
+    if (t.kind === "lines") (sec.lines || []).filter(l => l.trim()).forEach(l => rows.push("- " + l.trim()));
+    if (t.kind === "groups") sec.groups.forEach(g => {
+      const l = (g.label || "").trim(), x = (g.text || "").trim();
+      if (l || x) rows.push(l ? l + ": " + x : x);
+    });
+    if (t.kind === "items") sec.items.forEach(it => {
+      const title = (it[t.primary] || "").trim(), org = (it[t.org] || "").trim();
+      const when = t.single ? (it[t.single] || "").trim() : plainRange(it.start, it.end);
+      const head = [ [title, org].filter(Boolean).join(", "), when ].filter(Boolean).join("  ");
+      if (head) rows.push(head);
+      const sub = [(it.sub || "").trim(), t.meta ? (it[t.meta] || "").trim() : ""].filter(Boolean).join(" · ");
+      if (sub) rows.push(sub);
+      (it.bullets || []).filter(b => b.trim()).forEach(b => rows.push("  - " + b.trim()));
+      rows.push("");
+    });
+    if (!rows.length) return;
+    out.push(sec.title.toUpperCase(), "-".repeat(Math.max(8, sec.title.length)), ...rows, "");
+  });
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+}
+
+function slug() {
+  /* your name if you have typed one, otherwise whatever the file is called */
+  const src = (RG.doc.header.name || "").trim() ||
+              (RG.activeEntry() && RG.activeEntry().name) || "resume";
+  const n = src.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (!n) return "resume";
+  return /(resume|cv)$/.test(n) ? n : n + "-resume";
+}
+
+async function offer(filename, data) {
+  const dl = (window.claude && window.claude.use) ? await window.claude.use("downloads") : null;
+  if (dl) {
+    try {
+      await dl.save({ filename, data });
+      toast("Saved " + filename);
+    } catch (err) {
+      const c = err && err.code;
+      if (c === "declined") return;
+      if (c === "extension_not_enabled" || c === "rejected_extension") {
+        toast("This viewer will not save ." + filename.split(".").pop() +
+              " files. Open the copy in your resumemaker folder to download it.", "bad");
+      } else if (c === "too_large") toast("That file is too big to save.", "bad");
+      else toast("Could not save the file here. Try the copy in your resumemaker folder.", "bad");
+    }
+    return;
+  }
+  /* running as a local file: ordinary browser download */
+  const blob = new Blob([data], { type: "application/octet-stream" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast("Downloaded " + filename);
+}
+
+function doPrint() {
+  const d = RG.doc.design;
+  let st = $("#pageStyle");
+  if (!st) { st = document.createElement("style"); st.id = "pageStyle"; document.head.appendChild(st); }
+  st.textContent = "@page{size:" + (d.paper === "a4" ? "A4" : "letter") + "; margin:0}" +
+                   "@media print{.sheet-wrap{width:auto !important;height:auto !important}}";
+  /* embedded viewers sandbox printing; say so rather than letting it fail silently */
+  if (window.claude && window.claude.use) {
+    toast("Opening the print dialog. If nothing appears, this viewer blocks printing - open the copy in your resumemaker folder and print from there.");
+  }
+  try { window.print(); }
+  catch (e) { toast("This viewer will not open a print dialog. Use the copy in your resumemaker folder.", "bad"); }
+}
+
+$("#btnPrint").addEventListener("click", doPrint);
+
+/* one place that turns the current resume into a file on disk */
+async function download(kind) {
+  try {
+    if (kind === "docx") return await offer(slug() + ".docx", buildDocx().buffer);
+    if (kind === "txt") return await offer(slug() + ".txt", buildTxt());
+    if (kind === "json") return await offer(slug() + "-backup.json", JSON.stringify(RG.doc, null, 2));
+  } catch (err) {
+    toast("Could not build that file: " + (err && err.message ? err.message : err), "bad");
+  }
+}
+RG.download = download;
+
+$("#menuExport").addEventListener("click", async e => {
+  const b = e.target.closest("[data-act]"); if (!b) return;
+  const act = b.dataset.act;
+  $("#menuExport").classList.remove("open");
+
+  if (act === "pdf") return doPrint();
+  if (act === "docx" || act === "txt" || act === "json") return download(act);
+  if (act === "loadjson") {
+    RG.openModal("#importScrim");
+    showNote("Choose your <b>.json</b> backup file above to put everything back.", "");
+    return;
+  }
+  if (act === "reset") {
+    const previous = JSON.parse(JSON.stringify(RG.doc));
+    const yes = await RG.ask("Clear this resume?",
+      "You go back to an empty starting point. Export a backup first if you want to keep this one.",
+      "Clear it");
+    if (!yes) return;
+    RG.doc = RG.starterDoc();
+    RG.renderEditor(); RG.syncDesignUI(); RG.renderPreview(); RG.save(true); RG.renderFiles();
+    toast("Cleared. Starting fresh.", null, { label: "Undo", fn: () => restore(previous, "Brought it back.") });
+  }
+});
+
+RG.io = { readDocx, readPdf, parseResume, buildDocx, buildTxt, zip };
+RG.toast = toast;   /* the editor uses it for Undo after a delete */
+
+/* first-run nudge, once ever - after that your saved resume opens straight up */
+if (RG.firstVisit()) setTimeout(() => RG.openModal("#importScrim"), 350);
+
+})();
+</script>

@@ -1,0 +1,7 @@
+# normalise line endings so the build output does not churn between machines
+* text=auto eol=lf
+
+*.pdf  binary
+*.docx binary
+*.png  binary
+*.jpg  binary

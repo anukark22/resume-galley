@@ -1,0 +1,1094 @@
+
+<script>
+/* ============================================================================
+   Resume Galley - core
+   ========================================================================== */
+(function () {
+"use strict";
+
+const $  = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
+const uid = () => "x" + Math.random().toString(36).slice(2, 9);
+const esc = (s) => String(s == null ? "" : s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+  .replace(/"/g, "&quot;");
+
+/* ---------------------------------------------------------------- schema -- */
+/* Every section kind declares its own fields, so adding a section gives you a
+   labelled box for each thing that belongs in it - nothing free-form. */
+const TYPES = {
+  summary: {
+    name: "Summary", kind: "text",
+    ph: "Two or three lines on who you are and what you are after. Keep it concrete."
+  },
+  experience: {
+    name: "Experience", kind: "items", add: "Add a job",
+    primary: "role", org: "org", meta: "location", bul: "Highlights",
+    bulPh: "Rebuilt checkout, cutting drop-off 18%",
+    fields: [
+      { k: "role",     l: "Job title", ph: "Product Designer",     w: "full" },
+      { k: "org",      l: "Company",   ph: "Acme Inc.",            w: "half" },
+      { k: "location", l: "Location",  ph: "Colombo, LK",          w: "half" },
+      { k: "start",    l: "Start",     ph: "Jan 2023",             w: "third" },
+      { k: "end",      l: "End",       ph: "Present",              w: "third" },
+      { k: "sub",      l: "Note",      ph: "Promoted from Junior", w: "third" }
+    ]
+  },
+  education: {
+    name: "Education", kind: "items", add: "Add a qualification",
+    primary: "degree", org: "school", meta: "location", bul: "Details",
+    bulPh: "Dean's list, 2022 and 2023",
+    fields: [
+      { k: "degree",   l: "Qualification", ph: "BSc Computer Science", w: "full" },
+      { k: "school",   l: "Institution",   ph: "University of Colombo", w: "half" },
+      { k: "location", l: "Location",      ph: "Colombo, LK",          w: "half" },
+      { k: "start",    l: "Start",         ph: "2019",                 w: "third" },
+      { k: "end",      l: "End",           ph: "2023",                 w: "third" },
+      { k: "sub",      l: "Result",        ph: "First class honours",  w: "third" }
+    ]
+  },
+  projects: {
+    name: "Projects", kind: "items", add: "Add a project",
+    primary: "name", org: "stack", meta: "link", bul: "What it does",
+    bulPh: "Serves 4,000 monthly users on a free tier",
+    fields: [
+      { k: "name",  l: "Project",    ph: "Ledger",              w: "full" },
+      { k: "stack", l: "Built with", ph: "React, Postgres",     w: "half" },
+      { k: "link",  l: "Link",       ph: "github.com/you/ledger", w: "half" },
+      { k: "start", l: "Start",      ph: "2024",                w: "third" },
+      { k: "end",   l: "End",        ph: "2025",                w: "third" },
+      { k: "sub",   l: "Role",       ph: "Solo build",          w: "third" }
+    ]
+  },
+  awards: {
+    name: "Certifications", kind: "items", add: "Add a certificate",
+    primary: "name", org: "issuer", meta: "", bul: "Details", single: "date",
+    bulPh: "Scored in the top 5% of the cohort",
+    fields: [
+      { k: "name",   l: "Certificate or award", ph: "AWS Solutions Architect", w: "full" },
+      { k: "issuer", l: "Issued by",            ph: "Amazon Web Services",     w: "half" },
+      { k: "date",   l: "Date",                 ph: "Mar 2025",                w: "half" },
+      { k: "link",   l: "Credential link",      ph: "",                        w: "full" }
+    ]
+  },
+  skills: {
+    name: "Skills", kind: "groups", add: "Add a skill group"
+  },
+  list: {
+    name: "Simple list", kind: "lines", add: "Add a line",
+    bulPh: "Sinhala - native"
+  },
+  custom: {
+    name: "Custom section", kind: "items", add: "Add an entry",
+    primary: "title", org: "subtitle", meta: "meta", bul: "Details",
+    bulPh: "One point per line",
+    fields: [
+      { k: "title",    l: "Heading",   ph: "Volunteer lead",   w: "full" },
+      { k: "subtitle", l: "Subheading", ph: "Red Cross",       w: "half" },
+      { k: "meta",     l: "Aside",     ph: "Colombo",          w: "half" },
+      { k: "start",    l: "Start",     ph: "2024",             w: "half" },
+      { k: "end",      l: "End",       ph: "Present",          w: "half" }
+    ]
+  }
+};
+
+const ACCENTS = [
+  ["#B33A31", "Proof red"], ["#1E2530", "Ink black"], ["#24456B", "Navy"],
+  ["#17635C", "Teal"],      ["#6B2D5C", "Plum"],      ["#8A5A15", "Bronze"],
+  ["#3F5A22", "Olive"],     ["#7A7F88", "Graphite"]
+];
+
+/* ---------------------------------------------------------------- state --- */
+const KEY = "resume-galley/v1";
+
+function blankDoc() {
+  return {
+    v: 1,
+    design: { tpl: "rail", face: "serif", accent: "#B33A31", scale: 100,
+              lead: 142, mg: 64, paper: "letter", dateSep: "en" },
+    header: { name: "", headline: "", email: "", phone: "", location: "",
+              links: [] },
+    sections: []
+  };
+}
+
+function starterDoc() {
+  const d = blankDoc();
+  d.header = {
+    name: "Your Name", headline: "What you do, in six words",
+    email: "you@email.com", phone: "+94 77 000 0000", location: "Colombo, Sri Lanka",
+    links: [{ label: "LinkedIn", url: "linkedin.com/in/you" }]
+  };
+  d.sections = [
+    { id: uid(), type: "summary", title: "Summary", on: true, _open: true, text: "" },
+    { id: uid(), type: "experience", title: "Experience", on: true, _open: true,
+      items: [{ id: uid(), _open: true, role: "", org: "", location: "",
+                start: "", end: "", sub: "", bullets: [""] }] },
+    { id: uid(), type: "education", title: "Education", on: true, _open: false,
+      items: [{ id: uid(), _open: true, degree: "", school: "", location: "",
+                start: "", end: "", sub: "", bullets: [] }] },
+    { id: uid(), type: "skills", title: "Skills", on: true, _open: false,
+      groups: [{ id: uid(), label: "Tools", text: "" }] }
+  ];
+  return d;
+}
+
+/* ---- the file library -------------------------------------------------
+   Every resume you import or start lives here as a named file, and the one
+   you are editing is written back on every change. Nothing is ever held only
+   in memory, so what you imported is still there after a reload. */
+const STORE = "resume-galley/files/v1";
+
+let lib = loadLibrary();
+let doc = migrate(activeEntry().doc);
+
+function loadLibrary() {
+  let raw = null;
+  try { raw = localStorage.getItem(STORE); } catch (e) { /* storage blocked */ }
+  if (raw) {
+    try {
+      const l = JSON.parse(raw);
+      if (l && Array.isArray(l.files) && l.files.length) {
+        l.files.forEach(f => { f.id = f.id || uid(); f.doc = f.doc || blankDoc(); });
+        if (!l.files.some(f => f.id === l.activeId)) l.activeId = l.files[0].id;
+        return l;
+      }
+    } catch (e) {
+      /* never throw the work away over a parse error - park it and move on */
+      try { localStorage.setItem(STORE + "/unreadable", raw); } catch (e2) {}
+    }
+  }
+  /* first run on this browser, or upgrading from the single-document version */
+  let old = null;
+  try {
+    const legacy = localStorage.getItem(KEY);
+    if (legacy) { const d = JSON.parse(legacy); if (d && d.sections) old = d; }
+  } catch (e) {}
+  const first = { id: uid(), name: old ? "My resume" : "Untitled resume",
+                  updated: Date.now(), doc: old || starterDoc() };
+  return { activeId: first.id, files: [first] };
+}
+
+function activeEntry() {
+  return lib.files.find(f => f.id === lib.activeId) || lib.files[0];
+}
+/* true exactly once per browser, so the import dialog greets you and then
+   never interrupts you again */
+function firstVisit() {
+  if (lib.greeted) return false;
+  lib.greeted = true;
+  save(true);
+  return true;
+}
+function stamp(f) {
+  const d = f.doc || {};
+  return (d.header && d.header.name && d.header.name.trim()) || f.name || "Untitled resume";
+}
+function migrate(d) {
+  const b = blankDoc();
+  d.design = Object.assign(b.design, d.design || {});
+  /* Side headings became the default layout. Carry documents that were only
+     ever on the old default across once - a deliberate choice made after this
+     sticks, because picking any template sets the flag. */
+  if (!d.design.tplSet && d.design.tpl === "modern") d.design.tpl = "rail";
+  d.design.tplSet = true;
+  d.header = Object.assign(b.header, d.header || {});
+  d.header.links = d.header.links || [];
+  d.sections = (d.sections || []).map(s => {
+    s.id = s.id || uid();
+    if (!TYPES[s.type]) s.type = "custom";
+    if (s.on === undefined) s.on = true;
+    const kind = TYPES[s.type].kind;
+    if (kind === "items") s.items = (s.items || []).map(i => (i.id = i.id || uid(), i.bullets = i.bullets || [], i));
+    if (kind === "groups") s.groups = (s.groups || []).map(g => (g.id = g.id || uid(), g));
+    if (kind === "lines") s.lines = s.lines || [];
+    if (kind === "text") s.text = s.text || "";
+    return s;
+  });
+  return d;
+}
+let saveTimer = null;
+function save(now) {
+  clearTimeout(saveTimer);
+  const go = () => {
+    const f = activeEntry();
+    if (f) { f.doc = doc; f.updated = Date.now(); }
+    try {
+      localStorage.setItem(STORE, JSON.stringify(lib));
+      flashSaved("saved");
+    } catch (e) {
+      flashSaved("could not save - storage blocked");
+    }
+  };
+  now ? go() : (saveTimer = setTimeout(go, 500));
+}
+/* a close or a tab switch must not cost you the last half second of typing */
+window.addEventListener("pagehide", () => save(true));
+document.addEventListener("visibilitychange", () => { if (document.hidden) save(true); });
+
+function flashSaved(msg) {
+  const t = $("#savedTag"); if (!t) return;
+  const f = activeEntry();
+  t.textContent = f && msg === "saved" ? f.name + " " + String.fromCharCode(183) + " saved" : msg;
+  t.classList.add("flash");
+  setTimeout(() => t.classList.remove("flash"), 900);
+}
+function touch() { renderPreview(); save(); }
+
+/* ---- file operations --------------------------------------------------- */
+function openFile(id) {
+  if (id === lib.activeId) return;
+  save(true);
+  const f = lib.files.find(x => x.id === id);
+  if (!f) return;
+  lib.activeId = id;
+  doc = migrate(f.doc);
+  save(true);
+  renderEditor(); syncDesignUI(); renderPreview(); renderFiles();
+}
+/* two resumes for the same person are common; the list has to tell them apart */
+function uniqueName(name) {
+  const base = (String(name || "").trim()) || "Untitled resume";
+  if (!lib.files.some(f => f.name === base)) return base;
+  for (let i = 2; i < 99; i++) {
+    const t = base + " (" + i + ")";
+    if (!lib.files.some(f => f.name === t)) return t;
+  }
+  return base;
+}
+function newFile(name, d) {
+  save(true);
+  const f = { id: uid(), name: uniqueName(name), updated: Date.now(), doc: d || starterDoc() };
+  lib.files.unshift(f);
+  lib.activeId = f.id;
+  doc = migrate(f.doc);
+  save(true);
+  renderEditor(); syncDesignUI(); renderPreview(); renderFiles();
+  return f;
+}
+function duplicateFile(id) {
+  save(true);
+  const f = lib.files.find(x => x.id === id);
+  if (!f) return;
+  const copy = { id: uid(), name: uniqueName(f.name + " copy"), updated: Date.now(),
+                 doc: JSON.parse(JSON.stringify(f.doc)) };
+  lib.files.splice(lib.files.indexOf(f) + 1, 0, copy);
+  save(true); renderFiles();
+  return copy;
+}
+function renameActive(name) {
+  const f = activeEntry();
+  if (f) { f.name = name; save(); }
+}
+function setActiveName(name) {
+  const f = activeEntry();
+  if (!f || !name) return;
+  f.name = String(name).slice(0, 80);
+  save(true); renderFiles();
+}
+function deleteFile(id) {
+  const f = lib.files.find(x => x.id === id);
+  if (!f) return;
+  const snapshot = JSON.parse(JSON.stringify(lib));
+  const drop = () => {
+    lib.files.splice(lib.files.indexOf(f), 1);
+    if (!lib.files.length) {
+      const fresh = { id: uid(), name: "Untitled resume", updated: Date.now(), doc: starterDoc() };
+      lib.files.push(fresh);
+    }
+    if (!lib.files.some(x => x.id === lib.activeId)) {
+      lib.activeId = lib.files[0].id;
+      doc = migrate(lib.files[0].doc);
+    }
+    save(true);
+    renderEditor(); syncDesignUI(); renderPreview(); renderFiles();
+    const t = window.RG && window.RG.toast;
+    if (t) t("Deleted " + f.name + ".", null, { label: "Undo", fn: () => {
+      lib = snapshot;
+      doc = migrate(activeEntry().doc);
+      save(true);
+      renderEditor(); syncDesignUI(); renderPreview(); renderFiles();
+    } });
+  };
+  ask("Delete this resume?", quote(f.name) + " is removed from your saved files. " +
+      "Download a backup first if you might want it later.", "Delete resume")
+    .then(yes => { if (yes) drop(); });
+}
+
+function ago(ts) {
+  if (!ts) return "not saved yet";
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 45) return "saved just now";
+  if (s < 3600) return "saved " + Math.round(s / 60) + " min ago";
+  if (s < 86400) return "saved " + Math.round(s / 3600) + " h ago";
+  const d = new Date(ts);
+  return "saved " + d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+function renderFiles() {
+  const pane = $("#pane-files");
+  if (!pane) return;
+  const act = activeEntry();
+  let h = "";
+
+  h += '<h3>The resume you are editing</h3>';
+  h += '<div class="f full"><label for="fileName">File name</label>' +
+       '<input id="fileName" type="text" value="' + esc(act ? act.name : "") +
+       '" placeholder="My resume" autocomplete="off"></div>';
+  h += '<div class="row-add">' +
+    '<button class="btn sm" data-f="dl-docx">Download .docx</button>' +
+    '<button class="btn sm" data-f="dl-txt">Download .txt</button>' +
+    '<button class="btn sm" data-f="dl-json">Download backup</button>' +
+  '</div>';
+
+  h += '<h3>Saved on this browser <span class="count">' + lib.files.length + '</span></h3>';
+  lib.files.forEach(f => {
+    const on = f.id === lib.activeId;
+    const secs = (f.doc && f.doc.sections ? f.doc.sections.length : 0);
+    h += '<div class="file" data-open="' + f.id + '" aria-current="' + on + '" role="button" tabindex="0">' +
+      '<span class="fdot"' + (on ? "" : ' data-off="1"') + '></span>' +
+      '<span class="fname"><b>' + esc(f.name || "Untitled resume") + '</b>' +
+        '<small>' + esc(stamp(f)) + " " + String.fromCharCode(183) + " " + secs +
+        " section" + (secs === 1 ? "" : "s") + " " + String.fromCharCode(183) + " " + ago(f.updated) +
+      "</small></span>" +
+      '<button class="btn ghost icon sm" data-f="dup" data-id="' + f.id + '" title="Duplicate" aria-label="Duplicate">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>' +
+      "</button>" +
+      '<button class="btn ghost icon sm" data-f="del" data-id="' + f.id + '" title="Delete" aria-label="Delete">' + ICON.x + "</button>" +
+    "</div>";
+  });
+
+  h += '<div class="row-add" style="margin-top:10px">' +
+    '<button class="btn" data-f="new">' + ICON.plus + ' New blank resume</button>' +
+    '<button class="btn" data-f="import">Import a file</button>' +
+  '</div>';
+
+  h += '<div class="note" style="margin-top:12px"><span class="ic" aria-hidden="true">' +
+    String.fromCharCode(182) + '</span><div>These files live in <b>this browser only</b>. ' +
+    'They survive closing the tab, but not clearing site data or moving to another machine ' +
+    String.fromCharCode(8212) + ' use <b>Download backup</b> for that.</div></div>';
+
+  pane.innerHTML = h;
+}
+
+/* ---------------------------------------------------------- editor build -- */
+function newItem(type) {
+  const t = TYPES[type], o = { id: uid(), _open: true, bullets: [] };
+  (t.fields || []).forEach(f => (o[f.k] = ""));
+  return o;
+}
+function newSection(type) {
+  const t = TYPES[type];
+  const s = { id: uid(), type, title: t.name, on: true, _open: true };
+  if (t.kind === "items") s.items = [newItem(type)];
+  if (t.kind === "groups") s.groups = [{ id: uid(), label: "", text: "" }];
+  if (t.kind === "lines") s.lines = [""];
+  if (t.kind === "text") s.text = "";
+  return s;
+}
+
+const ICON = {
+  chev: '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>',
+  up:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
+  x:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  eye:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'
+};
+
+function fieldHTML(f, val, path) {
+  return '<div class="f ' + (f.w || "full") + '">' +
+    '<label for="' + path + '">' + esc(f.l) + '</label>' +
+    '<input id="' + path + '" type="text" value="' + esc(val) + '" placeholder="' + esc(f.ph || "") +
+    '" data-bind="' + path + '">' +
+  '</div>';
+}
+
+function bulletsHTML(label, arr, base, ph) {
+  let h = '<div class="f full"><label>' + esc(label) + '</label><div class="bullets">';
+  if (!arr.length) h += '<div class="empty">No points yet</div>';
+  arr.forEach((b, i) => {
+    h += '<div class="bul">' +
+      '<span class="dot" aria-hidden="true">&#8227;</span>' +
+      '<textarea rows="1" data-bind="' + base + '.' + i + '" placeholder="' + esc(ph || "") + '">' +
+        esc(b) + '</textarea>' +
+      '<div class="tools">' +
+        '<button class="btn ghost icon sm" data-act="bul-up" data-p="' + base + '" data-i="' + i + '" title="Move up" aria-label="Move point up">' + ICON.up + '</button>' +
+        '<button class="btn ghost icon sm" data-act="bul-del" data-p="' + base + '" data-i="' + i + '" title="Delete" aria-label="Delete point">' + ICON.x + '</button>' +
+      '</div></div>';
+  });
+  h += '</div><div class="row-add" style="margin-top:7px">' +
+    '<button class="btn sm" data-act="bul-add" data-p="' + base + '">' + ICON.plus + ' Add point</button>' +
+  '</div></div>';
+  return h;
+}
+
+function entryLabel(sec, it) {
+  const t = TYPES[sec.type];
+  const a = (it[t.primary] || "").trim();
+  const b = (it[t.org] || "").trim();
+  if (!a && !b) return '<span class="untitled">Empty entry</span>';
+  return esc(a || b) + (a && b ? ' <em>&middot; ' + esc(b) + '</em>' : "");
+}
+
+function renderEditor() {
+  const pane = $("#pane-content");
+  const scroll = pane.scrollTop;
+  let h = "";
+
+  /* --- header card (fixed, always first) --- */
+  h += '<div class="card' + (doc.header._open !== false ? " open" : "") + '" data-card="header">' +
+    '<div class="card-head" data-act="fold-header">' +
+      '<span class="sec-mark" aria-hidden="true">&#167;</span>' +
+      '<span class="sec-title" style="border-color:transparent">Name &amp; contact</span>' +
+      ICON.chev +
+    '</div><div class="card-body"><div class="grid">' +
+      fieldHTML({ k: "name", l: "Full name", ph: "Jane Perera", w: "full" }, doc.header.name, "header.name") +
+      fieldHTML({ k: "headline", l: "Headline", ph: "Product Designer", w: "full" }, doc.header.headline, "header.headline") +
+      fieldHTML({ k: "email", l: "Email", ph: "jane@email.com", w: "half" }, doc.header.email, "header.email") +
+      fieldHTML({ k: "phone", l: "Phone", ph: "+94 77 123 4567", w: "half" }, doc.header.phone, "header.phone") +
+      fieldHTML({ k: "location", l: "Location", ph: "Colombo, Sri Lanka", w: "full" }, doc.header.location, "header.location");
+
+  h += '<div class="f full"><label>Links</label>';
+  if (!doc.header.links.length) h += '<div class="empty">No links yet</div>';
+  doc.header.links.forEach((l, i) => {
+    h += '<div class="bul" style="margin-bottom:6px">' +
+      '<input type="text" style="flex:0 0 32%; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:6px 8px" value="' + esc(l.label) + '" placeholder="LinkedIn" data-bind="header.links.' + i + '.label">' +
+      '<input type="text" style="flex:1; background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:6px 8px; min-width:0" value="' + esc(l.url) + '" placeholder="linkedin.com/in/you" data-bind="header.links.' + i + '.url">' +
+      '<div class="tools"><button class="btn ghost icon sm" data-act="link-del" data-i="' + i + '" aria-label="Remove link">' + ICON.x + '</button></div>' +
+    '</div>';
+  });
+  h += '<div class="row-add" style="margin-top:6px"><button class="btn sm" data-act="link-add">' + ICON.plus + ' Add link</button></div></div>';
+  h += '</div></div></div>';
+
+  /* --- sections --- */
+  doc.sections.forEach((sec, si) => {
+    const t = TYPES[sec.type];
+    h += '<div class="card' + (sec._open ? " open" : "") + (sec.on ? "" : " off") + '" data-sec="' + sec.id + '">' +
+      '<div class="card-head" data-act="fold" data-s="' + si + '">' +
+        '<span class="sec-mark" aria-hidden="true">&#167;</span>' +
+        '<input class="sec-title" value="' + esc(sec.title) + '" data-bind="sections.' + si + '.title" aria-label="Section name">' +
+        countChip(sec) +
+        '<button class="btn ghost icon sm" data-act="sec-vis" data-s="' + si + '" title="' + (sec.on ? "Hide from resume" : "Show on resume") + '" aria-label="Toggle section">' + (sec.on ? ICON.eye : ICON.eyeOff) + '</button>' +
+        '<button class="btn ghost icon sm" data-act="sec-up" data-s="' + si + '" title="Move up" aria-label="Move section up">' + ICON.up + '</button>' +
+        '<button class="btn ghost icon sm" data-act="sec-down" data-s="' + si + '" title="Move down" aria-label="Move section down">' + ICON.down + '</button>' +
+        '<button class="btn ghost icon sm" data-act="sec-del" data-s="' + si + '" title="Delete section" aria-label="Delete section">' + ICON.x + '</button>' +
+        ICON.chev +
+      '</div><div class="card-body">';
+
+    if (t.kind === "text") {
+      h += '<div class="f full"><label>Text</label><textarea rows="5" data-bind="sections.' + si + '.text" placeholder="' + esc(t.ph) + '">' + esc(sec.text) + '</textarea></div>';
+    }
+
+    if (t.kind === "lines") {
+      h += bulletsHTML("Lines", sec.lines, "sections." + si + ".lines", t.bulPh);
+    }
+
+    if (t.kind === "groups") {
+      if (!sec.groups.length) h += '<div class="empty">No groups yet</div>';
+      sec.groups.forEach((g, gi) => {
+        h += '<div class="entry open"><div class="entry-body" style="border-top:0"><div class="grid">' +
+          '<div class="f half"><label>Group</label><input type="text" value="' + esc(g.label) + '" placeholder="Design" data-bind="sections.' + si + '.groups.' + gi + '.label"></div>' +
+          '<div class="f half" style="justify-content:flex-end"><label>&nbsp;</label><div class="row-add">' +
+            '<button class="btn sm" data-act="grp-up" data-s="' + si + '" data-i="' + gi + '">' + ICON.up + '</button>' +
+            '<button class="btn sm" data-act="grp-del" data-s="' + si + '" data-i="' + gi + '">' + ICON.x + ' Remove</button>' +
+          '</div></div>' +
+          '<div class="f full"><label>Items, separated by commas</label><textarea rows="2" data-bind="sections.' + si + '.groups.' + gi + '.text" placeholder="Figma, Sketch, After Effects">' + esc(g.text) + '</textarea></div>' +
+        '</div></div></div>';
+      });
+      h += '<div class="row-add"><button class="btn sm" data-act="grp-add" data-s="' + si + '">' + ICON.plus + ' ' + esc(t.add) + '</button></div>';
+    }
+
+    if (t.kind === "items") {
+      if (!sec.items.length) h += '<div class="empty">Nothing here yet</div>';
+      sec.items.forEach((it, ii) => {
+        h += '<div class="entry' + (it._open ? " open" : "") + '">' +
+          '<div class="entry-head" data-act="fold-item" data-s="' + si + '" data-i="' + ii + '">' +
+            '<span class="num">' + (ii + 1) + '</span>' +
+            '<span class="entry-name">' + entryLabel(sec, it) + '</span>' +
+            '<button class="btn ghost icon sm" data-act="item-up" data-s="' + si + '" data-i="' + ii + '" title="Move up" aria-label="Move entry up">' + ICON.up + '</button>' +
+            '<button class="btn ghost icon sm" data-act="item-down" data-s="' + si + '" data-i="' + ii + '" title="Move down" aria-label="Move entry down">' + ICON.down + '</button>' +
+            '<button class="btn ghost icon sm" data-act="item-del" data-s="' + si + '" data-i="' + ii + '" title="Delete" aria-label="Delete entry">' + ICON.x + '</button>' +
+            ICON.chev +
+          '</div><div class="entry-body"><div class="grid">';
+        t.fields.forEach(f => {
+          h += fieldHTML(f, it[f.k], "sections." + si + ".items." + ii + "." + f.k);
+        });
+        h += bulletsHTML(t.bul, it.bullets, "sections." + si + ".items." + ii + ".bullets", t.bulPh);
+        h += '</div></div></div>';
+      });
+      h += '<div class="row-add"><button class="btn sm" data-act="item-add" data-s="' + si + '">' + ICON.plus + ' ' + esc(t.add) + '</button></div>';
+    }
+
+    h += '</div></div>';
+  });
+
+  h += '<div class="row-add" style="margin-top:4px"><button class="btn" data-act="sec-add" style="width:100%; justify-content:center">' + ICON.plus + ' Add section</button></div>';
+
+  pane.innerHTML = h;
+  pane.scrollTop = scroll;
+  $$("textarea", pane).forEach(autosize);
+}
+
+function countChip(sec) {
+  const t = TYPES[sec.type];
+  let n = 0;
+  if (t.kind === "items") n = sec.items.length;
+  else if (t.kind === "groups") n = sec.groups.length;
+  else if (t.kind === "lines") n = sec.lines.length;
+  else return "";
+  return '<span class="count">' + n + '</span>';
+}
+
+function autosize(ta) {
+  if (!ta.classList.contains("f") && ta.closest(".bul")) {
+    ta.style.height = "auto";
+    ta.style.height = Math.max(33, ta.scrollHeight) + "px";
+  }
+}
+
+/* --------------------------------------------------------- path plumbing -- */
+function getPath(p) {
+  return p.split(".").reduce((o, k) => (o == null ? o : o[k]), doc);
+}
+function setPath(p, v) {
+  const parts = p.split(".");
+  const last = parts.pop();
+  const o = parts.reduce((o, k) => o[k], doc);
+  o[last] = v;
+}
+
+/* ------------------------------------------------------------- preview ---- */
+function dateRange(a, b) {
+  a = (a || "").trim(); b = (b || "").trim();
+  const sep = doc.design.dateSep === "to" ? " to " : " – ";
+  if (a && b) return esc(a) + sep + esc(b);
+  return esc(a || b);
+}
+
+function itemHTML(sec, it) {
+  const t = TYPES[sec.type];
+  const title = (it[t.primary] || "").trim();
+  const org = (it[t.org] || "").trim();
+  const meta = t.meta ? (it[t.meta] || "").trim() : "";
+  const when = t.single ? esc((it[t.single] || "").trim()) : dateRange(it.start, it.end);
+  const sub = (it.sub || "").trim();
+  const bullets = (it.bullets || []).filter(b => b && b.trim());
+  if (!title && !org && !when && !bullets.length) return "";
+
+  let h = '<div class="r-item">';
+  h += '<div class="r-item-top"><div>';
+  if (title) h += '<span class="r-role">' + esc(title) + '</span>';
+  if (title && org) h += '<span class="r-org"><span class="at"> &mdash; </span>' + esc(org) + '</span>';
+  else if (org) h += '<span class="r-org">' + esc(org) + '</span>';
+  h += '</div>';
+  if (when) h += '<div class="r-when">' + when + '</div>';
+  h += '</div>';
+
+  const subline = [sub, meta].filter(Boolean).join(" · ");
+  if (subline) h += '<div class="r-sub">' + esc(subline) + '</div>';
+
+  if (bullets.length) {
+    h += '<ul class="r-bul">' + bullets.map(b => "<li>" + esc(b.trim()) + "</li>").join("") + "</ul>";
+  }
+  return h + "</div>";
+}
+
+function renderPreview() {
+  const d = doc.design;
+  const sheet = $("#sheet");
+  sheet.dataset.tpl = d.tpl;
+  sheet.dataset.face = d.face;
+  sheet.style.setProperty("--rs", (d.scale / 100).toFixed(3));
+  sheet.style.setProperty("--lead", (d.lead / 100).toFixed(2));
+  sheet.style.setProperty("--acc", d.accent);
+  sheet.style.setProperty("--mg", d.mg + "px");
+  const pageH = d.paper === "a4" ? 1123 : 1056;
+  const pageW = d.paper === "a4" ? 794 : 816;
+  sheet.style.width = pageW + "px";
+  sheet.style.minHeight = pageH + "px";
+
+  const hd = doc.header;
+  let h = "";
+  const bits = [];
+  if (hd.email) bits.push('<a href="mailto:' + esc(hd.email) + '">' + esc(hd.email) + "</a>");
+  if (hd.phone) bits.push(esc(hd.phone));
+  if (hd.location) bits.push(esc(hd.location));
+  (hd.links || []).forEach(l => {
+    if (!l.url && !l.label) return;
+    const url = (l.url || "").trim();
+    const href = /^https?:/i.test(url) ? url : "https://" + url;
+    bits.push('<a href="' + esc(href) + '" rel="noreferrer">' + esc(l.label || url) + "</a>");
+  });
+
+  const anything = hd.name || hd.headline || bits.length || doc.sections.some(s => s.on);
+  if (anything) {
+    h += '<div class="r-head">';
+    if (hd.name) h += '<h1 class="r-name">' + esc(hd.name) + "</h1>";
+    if (hd.headline) h += '<p class="r-headline">' + esc(hd.headline) + "</p>";
+    if (bits.length) {
+      h += '<div class="r-contact">' + bits.join('<span class="sep">&nbsp;&bull;&nbsp;</span>') + "</div>";
+    }
+    h += "</div>";
+  }
+
+  doc.sections.forEach(sec => {
+    if (!sec.on) return;
+    const t = TYPES[sec.type];
+    let body = "";
+
+    if (t.kind === "text") {
+      const v = (sec.text || "").trim();
+      if (v) body = '<p class="r-text">' + esc(v) + "</p>";
+    } else if (t.kind === "items") {
+      body = sec.items.map(it => itemHTML(sec, it)).join("");
+    } else if (t.kind === "groups") {
+      body = sec.groups.map(g => {
+        const label = (g.label || "").trim(), text = (g.text || "").trim();
+        if (!label && !text) return "";
+        if (!label) return '<div class="r-skill"><span>' + esc(text) + "</span></div>";
+        return '<div class="r-skill"><b>' + esc(label) + "</b><span>" + esc(text) + "</span></div>";
+      }).join("");
+    } else if (t.kind === "lines") {
+      const ls = (sec.lines || []).filter(l => l && l.trim());
+      if (ls.length) body = '<ul class="r-bul">' + ls.map(l => "<li>" + esc(l.trim()) + "</li>").join("") + "</ul>";
+    }
+
+    if (!body.trim()) return;
+    h += '<section class="r-sec"><h2 class="r-sec-h">' + esc(sec.title) + "</h2>" +
+         '<div class="r-sec-body">' + body + "</div></section>";
+  });
+
+  if (!h.trim()) {
+    h = '<div class="r-empty">Your resume shows up here as you type.<br>Import the one you already have to start.</div>';
+  }
+  $("#sheetInner").innerHTML = h;
+  schedulePaginate();
+}
+
+/* rAF is frozen while the tab is in the background, so fall back to a timer -
+   otherwise a resume opened in a background tab shows no page count. */
+let pagFrame = null, pagTimer = null;
+function schedulePaginate() {
+  if (pagFrame) cancelAnimationFrame(pagFrame);
+  clearTimeout(pagTimer);
+  pagFrame = null;
+  if (document.hidden) pagTimer = setTimeout(paginate, 50);
+  else pagFrame = requestAnimationFrame(() => { pagFrame = null; paginate(); });
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) paginate(); });
+
+function paginate() {
+  const sheet = $("#sheet");
+  const d = doc.design;
+  const pageH = d.paper === "a4" ? 1123 : 1056;
+  $$(".page-line", sheet).forEach(n => n.remove());
+  const contentH = $("#sheetInner").scrollHeight + 2;
+  const pages = Math.max(1, Math.ceil(contentH / pageH));
+  sheet.style.minHeight = pages * pageH + "px";
+  for (let i = 1; i < pages; i++) {
+    const el = document.createElement("div");
+    el.className = "page-line";
+    el.style.top = i * pageH + "px";
+    el.innerHTML = "<span>page " + (i + 1) + "</span>";
+    sheet.appendChild(el);
+  }
+  const fill = Math.round((contentH / (pages * pageH)) * 100);
+  const bar = $("#stageBar");
+  bar.innerHTML =
+    '<span class="chip">' + pages + " page" + (pages > 1 ? "s" : "") + "</span>" +
+    '<span class="chip">' + (d.paper === "a4" ? "A4" : "US Letter") + "</span>" +
+    '<span class="chip">' + fill + "% full</span>" +
+    (pages > 2 ? '<span class="chip warn">long for a resume</span>' : "");
+  fit();
+}
+
+function fit() {
+  const stage = $("#stage"), sheet = $("#sheet"), wrap = $(".sheet-wrap");
+  if (!stage || !sheet) return;
+  const avail = stage.clientWidth - 40;
+  const w = sheet.offsetWidth;
+  const k = Math.min(1, avail / w);
+  sheet.style.transform = k < 1 ? "scale(" + k + ")" : "";
+  wrap.style.width = w * k + "px";
+  wrap.style.height = sheet.offsetHeight * k + "px";
+}
+
+/* ------------------------------------------------------------- events ----- */
+const pane = $("#pane-content");
+
+document.addEventListener("input", e => {
+  const el = e.target;
+  const bind = el.dataset && el.dataset.bind;
+  if (!bind) return;
+  setPath(bind, el.value);
+  if (el.tagName === "TEXTAREA") autosize(el);
+  /* keep the collapsed entry label live without rebuilding the editor */
+  const entry = el.closest(".entry");
+  if (entry) {
+    const head = $(".entry-name", entry);
+    const m = bind.match(/^sections\.(\d+)\.items\.(\d+)\./);
+    if (head && m) head.innerHTML = entryLabel(doc.sections[+m[1]], doc.sections[+m[1]].items[+m[2]]);
+  }
+  touch();
+});
+
+pane.addEventListener("click", e => {
+  const btn = e.target.closest("[data-act]");
+  if (!btn) return;
+  const act = btn.dataset.act;
+  const si = +btn.dataset.s, ii = +btn.dataset.i;
+  const sec = doc.sections[si];
+
+  if (act === "fold-header") {
+    if (e.target.closest("input")) return;
+    doc.header._open = doc.header._open === false;
+    renderEditor(); save(); return;
+  }
+  if (act === "fold") {
+    if (e.target.closest("input") || e.target.closest("button")) return;
+    sec._open = !sec._open; renderEditor(); save(); return;
+  }
+  if (act === "fold-item") {
+    if (e.target.closest("button")) return;
+    sec.items[ii]._open = !sec.items[ii]._open; renderEditor(); save(); return;
+  }
+
+  /* Ops that create something return the data path of the box to land in.
+     The editor is rebuilt afterwards, so the path is the only stable handle. */
+  const ops = {
+    "link-add":  () => { doc.header.links.push({ label: "", url: "" });
+                         return "header.links." + (doc.header.links.length - 1) + ".label"; },
+    "link-del":  () => {
+      const l = doc.header.links[ii], name = (l.url || "").trim() || (l.label || "").trim();
+      removeWithAsk({
+        empty: !name,
+        title: "Remove this link?", body: quote(name) + " comes off your contact line.",
+        ok: "Remove link", done: "Link removed.",
+        remove: () => { const i = doc.header.links.indexOf(l); if (i > -1) doc.header.links.splice(i, 1); }
+      });
+      return "skip";
+    },
+    "sec-vis":   () => (sec.on = !sec.on),
+    "sec-up":    () => move(doc.sections, si, -1),
+    "sec-down":  () => move(doc.sections, si, 1),
+    "sec-del":   () => {
+      removeWithAsk({
+        empty: !sectionFilled(sec),
+        title: "Delete this section?",
+        body: quote(sec.title) + " and everything inside it goes. Nothing else is touched.",
+        ok: "Delete section", done: "Section deleted.",
+        remove: () => { const i = doc.sections.indexOf(sec); if (i > -1) doc.sections.splice(i, 1); }
+      });
+      return "skip";
+    },
+    "sec-add":   () => { openAdd(); return "skip"; },
+    "item-add":  () => { sec.items.push(newItem(sec.type));
+                         return "sections." + si + ".items." + (sec.items.length - 1) +
+                                "." + TYPES[sec.type].fields[0].k; },
+    "item-del":  () => {
+      const it = sec.items[ii], t = TYPES[sec.type];
+      const name = (it[t.primary] || "").trim() || (it[t.org] || "").trim();
+      const buls = (it.bullets || []).filter(b => (b || "").trim()).length;
+      removeWithAsk({
+        empty: !itemFilled(sec, it),
+        title: "Delete this entry?",
+        body: (name ? quote(name) : "This entry") +
+              (buls ? " and its " + buls + " point" + (buls === 1 ? "" : "s") : "") + " will be removed.",
+        ok: "Delete entry", done: "Entry deleted.",
+        remove: () => { const i = sec.items.indexOf(it); if (i > -1) sec.items.splice(i, 1); }
+      });
+      return "skip";
+    },
+    "item-up":   () => move(sec.items, ii, -1),
+    "item-down": () => move(sec.items, ii, 1),
+    "grp-add":   () => { sec.groups.push({ id: uid(), label: "", text: "" });
+                         return "sections." + si + ".groups." + (sec.groups.length - 1) + ".label"; },
+    "grp-del":   () => {
+      const g = sec.groups[ii], name = (g.label || "").trim() || (g.text || "").trim();
+      removeWithAsk({
+        empty: !((g.label || "").trim() || (g.text || "").trim()),
+        title: "Delete this group?", body: quote(name) + " will be removed.",
+        ok: "Delete group", done: "Group deleted.",
+        remove: () => { const i = sec.groups.indexOf(g); if (i > -1) sec.groups.splice(i, 1); }
+      });
+      return "skip";
+    },
+    "grp-up":    () => move(sec.groups, ii, -1),
+    "bul-add":   () => { const p = btn.dataset.p, a = getPath(p); a.push("");
+                         return p + "." + (a.length - 1); },
+    "bul-del":   () => {
+      const arr = getPath(btn.dataset.p), txt = (arr[ii] || "").trim();
+      removeWithAsk({
+        empty: !txt,
+        title: "Delete this point?", body: quote(txt.length > 100 ? txt.slice(0, 100) + "…" : txt),
+        ok: "Delete point", done: "Point deleted.",
+        remove: () => arr.splice(ii, 1)
+      });
+      return "skip";
+    },
+    "bul-up":    () => move(getPath(btn.dataset.p), ii, -1)
+  };
+  if (!ops[act]) return;
+  const focusPath = ops[act]();
+  if (focusPath === "skip") return;
+  renderEditor(); renderPreview(); save(true);
+  focusField(focusPath);
+});
+
+/* The old node is detached once renderEditor runs - look the new one up. */
+function focusField(path) {
+  if (typeof path !== "string" || !path) return;
+  const el = $('[data-bind="' + path + '"]');
+  if (!el) return;
+  el.focus({ preventScroll: true });
+  el.scrollIntoView({ block: "nearest" });
+}
+function firstFieldPath(si) {
+  const s = doc.sections[si], t = TYPES[s.type];
+  if (t.kind === "items") return "sections." + si + ".items.0." + t.fields[0].k;
+  if (t.kind === "groups") return "sections." + si + ".groups.0.label";
+  if (t.kind === "lines") return "sections." + si + ".lines.0";
+  return "sections." + si + ".text";
+}
+
+/* Deleting is the one move you cannot type your way back out of, so anything
+   holding content asks first. A blank row goes straight away - there is nothing
+   to lose - and every delete leaves an Undo on the toast either way. */
+function removeWithAsk(o) {
+  const snapshot = JSON.parse(JSON.stringify(doc));
+  const go = () => {
+    o.remove();
+    renderEditor(); renderPreview(); save(true);
+    const t = window.RG && window.RG.toast;
+    if (t) t(o.done, null, { label: "Undo", fn: () => {
+      doc = migrate(snapshot);
+      renderEditor(); syncDesignUI(); renderPreview(); save(true);
+    } });
+  };
+  if (o.empty) return go();
+  ask(o.title, o.body, o.ok).then(yes => { if (yes) go(); });
+}
+
+const quote = s => "“" + String(s == null ? "" : s) + "”";
+
+function itemFilled(sec, it) {
+  const t = TYPES[sec.type];
+  if ((it.bullets || []).some(b => (b || "").trim())) return true;
+  return (t.fields || []).some(f => (it[f.k] || "").trim());
+}
+function sectionFilled(s) {
+  const t = TYPES[s.type];
+  if (t.kind === "text") return !!(s.text || "").trim();
+  if (t.kind === "lines") return (s.lines || []).some(l => (l || "").trim());
+  if (t.kind === "groups") return (s.groups || []).some(g => (g.label || "").trim() || (g.text || "").trim());
+  return (s.items || []).some(it => itemFilled(s, it));
+}
+
+/* window.confirm is inert inside sandboxed frames, so ask in the page. */
+function ask(title, body, okLabel) {
+  return new Promise(resolve => {
+    const scrim = $("#askScrim"), ok = $("#askOk");
+    $("#askTitle").textContent = title;
+    $("#askBody").textContent = body;
+    ok.textContent = okLabel || "Delete";
+    const done = v => {
+      scrim.classList.remove("on");
+      ok.removeEventListener("click", yes);
+      scrim.removeEventListener("click", no);
+      document.removeEventListener("keydown", key);
+      resolve(v);
+    };
+    const yes = () => done(true);
+    const no = e => { if (e.target === scrim || e.target.closest("[data-close]")) done(false); };
+    const key = e => { if (e.key === "Escape") done(false); };
+    ok.addEventListener("click", yes);
+    scrim.addEventListener("click", no);
+    document.addEventListener("keydown", key);
+    scrim.classList.add("on");
+    setTimeout(() => ok.focus(), 30);
+  });
+}
+
+function move(arr, i, d) {
+  const j = i + d;
+  if (j < 0 || j >= arr.length) return;
+  arr.splice(j, 0, arr.splice(i, 1)[0]);
+}
+
+/* Enter inside a bullet makes the next bullet, the way a list should behave. */
+pane.addEventListener("keydown", e => {
+  const ta = e.target;
+  if (e.key !== "Enter" || e.shiftKey || !ta.closest || !ta.closest(".bul")) return;
+  const bind = ta.dataset.bind; if (!bind) return;
+  e.preventDefault();
+  const parts = bind.split("."); const i = +parts.pop();
+  const arr = getPath(parts.join("."));
+  arr.splice(i + 1, 0, "");
+  renderEditor(); renderPreview(); save(true);
+  const next = $('[data-bind="' + parts.join(".") + "." + (i + 1) + '"]');
+  next && next.focus();
+});
+
+/* ---- the Files pane ---- */
+$("#pane-files").addEventListener("input", e => {
+  if (e.target.id === "fileName") {
+    renameActive(e.target.value);
+    const row = $('.file[aria-current="true"] .fname b');
+    if (row) row.textContent = e.target.value || "Untitled resume";
+  }
+});
+$("#pane-files").addEventListener("click", e => {
+  const btn = e.target.closest("[data-f]");
+  if (btn) {
+    const act = btn.dataset.f, id = btn.dataset.id;
+    if (act === "new") newFile();
+    else if (act === "import") openModal("#importScrim");
+    else if (act === "dup") duplicateFile(id);
+    else if (act === "del") deleteFile(id);
+    else if (act === "dl-docx" || act === "dl-txt" || act === "dl-json") {
+      const dl = window.RG && window.RG.download;
+      if (dl) dl(act.slice(3));
+    }
+    return;
+  }
+  const row = e.target.closest("[data-open]");
+  if (row) openFile(row.dataset.open);
+});
+$("#pane-files").addEventListener("keydown", e => {
+  const row = e.target.closest("[data-open]");
+  if (row && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openFile(row.dataset.open); }
+});
+
+/* ---- rail tabs / mobile view ---- */
+$$(".tab").forEach(t => t.addEventListener("click", () => {
+  $$(".tab").forEach(x => x.setAttribute("aria-selected", String(x === t)));
+  $$(".pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + t.dataset.pane));
+}));
+$$(".mob-tabs button").forEach(b => b.addEventListener("click", () => {
+  $$(".mob-tabs button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  document.body.dataset.view = b.dataset.view;
+  paginate();   /* the sheet had no measurable height while it was hidden */
+}));
+/* harmless on desktop - the Edit/Preview switch only exists under 900px */
+document.body.dataset.view = "edit";
+
+/* ---- design controls ---- */
+function seg(id, key, after) {
+  const box = $(id); if (!box) return;
+  box.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    doc.design[key] = b.dataset.v;
+    $$("button", box).forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    after && after();
+    touch();
+  });
+}
+seg("#segTpl", "tpl"); seg("#segFace", "face"); seg("#segPaper", "paper"); seg("#segDate", "dateSep");
+
+$("#swatches").innerHTML = ACCENTS.map(a =>
+  '<button class="sw" style="background:' + a[0] + '" data-v="' + a[0] + '" title="' + a[1] + '" aria-label="' + a[1] + '" aria-pressed="false"></button>'
+).join("");
+$("#swatches").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  doc.design.accent = b.dataset.v;
+  $$("#swatches button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  touch();
+});
+
+function rng(id, key, label, fmt) {
+  const el = $(id); if (!el) return;
+  el.addEventListener("input", () => {
+    doc.design[key] = +el.value;
+    $(label).textContent = fmt(+el.value);
+    touch();
+  });
+}
+rng("#rngScale", "scale", "#valScale", v => v + "%");
+rng("#rngLead", "lead", "#valLead", v => (v / 100).toFixed(2));
+rng("#rngMg", "mg", "#valMg", v => (v / 96).toFixed(2) + " in");
+
+function syncDesignUI() {
+  const d = doc.design;
+  const set = (id, v) => $$(id + " button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
+  set("#segTpl", d.tpl); set("#segFace", d.face); set("#segPaper", d.paper); set("#segDate", d.dateSep);
+  set("#swatches", d.accent);
+  $("#rngScale").value = d.scale; $("#valScale").textContent = d.scale + "%";
+  $("#rngLead").value = d.lead;   $("#valLead").textContent = (d.lead / 100).toFixed(2);
+  $("#rngMg").value = d.mg;       $("#valMg").textContent = (d.mg / 96).toFixed(2) + " in";
+}
+
+/* ---- add-section dialog ---- */
+function openAdd() {
+  const list = $("#addList");
+  list.innerHTML = Object.keys(TYPES).map(k =>
+    '<button class="btn" data-t="' + k + '" style="justify-content:flex-start; height:auto; padding:10px 12px; text-align:left">' +
+      '<span class="sec-mark" aria-hidden="true">&#167;</span>' +
+      '<span><b style="display:block">' + esc(TYPES[k].name) + "</b>" +
+      '<small style="color:var(--ink-3); font-weight:400">' + esc(describe(k)) + "</small></span>" +
+    "</button>"
+  ).join("");
+  openModal("#addScrim");
+}
+function describe(k) {
+  return {
+    summary: "One block of prose at the top",
+    experience: "Jobs with dates and bullet points",
+    education: "Degrees, schools and results",
+    projects: "Side work, with links",
+    awards: "Certificates, awards, licences",
+    skills: "Grouped lists, one line each",
+    list: "Plain bullets - languages, interests",
+    custom: "Anything else, your own labels"
+  }[k] || "";
+}
+$("#addList").addEventListener("click", e => {
+  const b = e.target.closest("[data-t]"); if (!b) return;
+  doc.sections.push(newSection(b.dataset.t));
+  closeModal("#addScrim");
+  renderEditor(); renderPreview(); save(true);
+  focusField(firstFieldPath(doc.sections.length - 1));
+});
+
+/* ---- modals ---- */
+function openModal(sel) {
+  if (sel === "#importScrim" && window.RG && window.RG.resetImport) window.RG.resetImport();
+  $(sel).classList.add("on");
+}
+function closeModal(sel) { $(sel).classList.remove("on"); }
+$$(".scrim").forEach(s => {
+  s.addEventListener("click", e => {
+    if (e.target === s || e.target.closest("[data-close]")) s.classList.remove("on");
+  });
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") $$(".scrim.on").forEach(s => s.classList.remove("on"));
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); save(true); }
+});
+
+/* ---- menus ---- */
+$("#btnExport").addEventListener("click", e => {
+  e.stopPropagation();
+  $("#menuExport").classList.toggle("open");
+});
+document.addEventListener("click", () => $$(".menu.open").forEach(m => m.classList.remove("open")));
+
+/* ---- resize ---- */
+let rt = null;
+window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(paginate, 90); });
+
+/* ---- boot ---- */
+window.RG = {
+  get doc() { return doc; },
+  set doc(d) { doc = d; },
+  renderEditor, renderPreview, syncDesignUI, renderFiles, save, blankDoc, starterDoc, migrate,
+  TYPES, uid, openModal, closeModal, $, $$, esc, dateRange, flashSaved, ask,
+  newFile, setActiveName, activeEntry, firstVisit
+};
+renderEditor(); syncDesignUI(); renderPreview(); renderFiles();
+save(true);   /* make sure a first-run library exists on disk straight away */
+$("#btnImport").addEventListener("click", () => openModal("#importScrim"));
+
+})();
+</script>
