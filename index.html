@@ -276,14 +276,6 @@ button,input,select,textarea{font:inherit; color:inherit}
 /* a pasted URL with no spaces must never push past the paper edge */
 .sheet-inner{padding:var(--mg,64px); overflow-wrap:anywhere}
 .r-when{overflow-wrap:normal}
-.page-line{
-  position:absolute; left:0; right:0; height:0; border-top:1px dashed var(--paper-line);
-  pointer-events:none;
-}
-.page-line span{
-  position:absolute; right:8px; top:-15px; font-family:"IBM Plex Mono",monospace; font-size:8.5px;
-  letter-spacing:.1em; color:#9AA1AD; text-transform:uppercase; background:var(--paper); padding:0 4px;
-}
 
 .sheet{
   --rs:1; --lead:1.42; --acc:#B33A31;
@@ -484,7 +476,7 @@ input[type=range]{width:100%; accent-color:var(--mark)}
 @media print{
   html,body{background:#fff !important; height:auto !important; overflow:visible !important}
   .app{height:auto; display:block; overflow:visible}
-  .bar,.rail,.mob-tabs,.stage-bar,.scrim,.page-line{display:none !important}
+  .bar,.rail,.mob-tabs,.stage-bar,.scrim{display:none !important}
   .work{display:block; overflow:visible}
   .stage{padding:0; display:block; background:#fff; overflow:visible}
   .sheet{
@@ -1362,17 +1354,9 @@ function paginate() {
   const sheet = $("#sheet");
   const d = doc.design;
   const pageH = d.paper === "a4" ? 1123 : 1056;
-  $$(".page-line", sheet).forEach(n => n.remove());
   const contentH = $("#sheetInner").scrollHeight + 2;
   const pages = Math.max(1, Math.ceil(contentH / pageH));
   sheet.style.minHeight = pages * pageH + "px";
-  for (let i = 1; i < pages; i++) {
-    const el = document.createElement("div");
-    el.className = "page-line";
-    el.style.top = i * pageH + "px";
-    el.innerHTML = "<span>page " + (i + 1) + "</span>";
-    sheet.appendChild(el);
-  }
   const fill = Math.round((contentH / (pages * pageH)) * 100);
   const bar = $("#stageBar");
   bar.innerHTML =
