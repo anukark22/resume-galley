@@ -9,37 +9,43 @@
   --bg:#F3F4F6; --panel:#FFFFFF; --panel-2:#F7F8F9; --panel-3:#EEF0F2;
   --ink:#17191D; --ink-2:#6B7078; --ink-3:#9AA0A8;
   --line:#E3E5E8; --line-2:#EDEEF1;
-  --accent:#263B52; --accent-soft:#EAEEF3; --accent-ink:#1C2C3E;
+  --accent:#263B52; --accent-soft:#EAEEF3; --on-accent:#FFFFFF;
   --danger:#A8342C; --danger-soft:#FAEEED;
   --warn:#8A6212; --warn-soft:#FBF3E3;
   --ok:#2C6349;
   --radius:8px;
   --paper:#FFFFFF; --paper-ink:#17191D; --paper-ink-2:#5C626B; --paper-line:#DDE0E4;
+  --page-edge:#DDE0E4;
   --shadow:0 1px 2px rgba(20,24,32,.05), 0 10px 30px -14px rgba(20,24,32,.22);
 }
+
+/* Dark is designed, not inverted: the canvas sinks, panels lift a step above
+   it, and the accent moves to a pale ink blue that still reads on a dark
+   ground. The paper stays white - it is paper - but its edge is dimmed so a
+   full sheet does not glare against the surrounding dark. */
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#0E1013; --panel:#16181C; --panel-2:#1B1E23; --panel-3:#22262C;
-    --ink:#E9EBEE; --ink-2:#9BA1AA; --ink-3:#6C737C;
-    --line:#25292F; --line-2:#1F2328;
-    --accent:#93B2D4; --accent-soft:#1A222D; --accent-ink:#B6CCE4;
-    --danger:#E0776D; --danger-soft:#2A1A18;
-    --warn:#D6A94E; --warn-soft:#2A2114;
-    --ok:#69B892;
-    --paper-line:#D5D8DC;
-    --shadow:0 1px 2px rgba(0,0,0,.5), 0 12px 34px -16px rgba(0,0,0,.8);
+    --bg:#0F1114; --panel:#17191D; --panel-2:#1C1F24; --panel-3:#23272D;
+    --ink:#E8EAED; --ink-2:#9CA2AB; --ink-3:#848A93;
+    --line:#262A30; --line-2:#1F2329;
+    --accent:#8FB0D6; --accent-soft:#1A2029; --on-accent:#0F1114;
+    --danger:#E2786E; --danger-soft:#2B1B19;
+    --warn:#D3A85A; --warn-soft:#29211A;
+    --ok:#6FB894;
+    --page-edge:#3A3F46;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 12px 34px -16px rgba(0,0,0,.75);
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0E1013; --panel:#16181C; --panel-2:#1B1E23; --panel-3:#22262C;
-  --ink:#E9EBEE; --ink-2:#9BA1AA; --ink-3:#6C737C;
-  --line:#25292F; --line-2:#1F2328;
-  --accent:#93B2D4; --accent-soft:#1A222D; --accent-ink:#B6CCE4;
-  --danger:#E0776D; --danger-soft:#2A1A18;
-  --warn:#D6A94E; --warn-soft:#2A2114;
-  --ok:#69B892;
-  --paper-line:#D5D8DC;
-  --shadow:0 1px 2px rgba(0,0,0,.5), 0 12px 34px -16px rgba(0,0,0,.8);
+  --bg:#0F1114; --panel:#17191D; --panel-2:#1C1F24; --panel-3:#23272D;
+  --ink:#E8EAED; --ink-2:#9CA2AB; --ink-3:#848A93;
+  --line:#262A30; --line-2:#1F2329;
+  --accent:#8FB0D6; --accent-soft:#1A2029; --on-accent:#0F1114;
+  --danger:#E2786E; --danger-soft:#2B1B19;
+  --warn:#D3A85A; --warn-soft:#29211A;
+  --ok:#6FB894;
+  --page-edge:#3A3F46;
+  --shadow:0 1px 2px rgba(0,0,0,.5), 0 12px 34px -16px rgba(0,0,0,.75);
 }
 
 *{box-sizing:border-box}
@@ -101,11 +107,8 @@ button,input,select,textarea{font:inherit; color:inherit}
 .btn:hover{background:var(--panel-3)}
 .btn.outline{border-color:var(--line); background:var(--panel)}
 .btn.outline:hover{background:var(--panel-2); border-color:var(--ink-3)}
-.btn.primary{background:var(--accent); color:#fff; border-color:var(--accent)}
-:root[data-theme="dark"] .btn.primary,
-:root:not([data-theme="light"]) .btn.primary{color:#0E1013}
-@media (prefers-color-scheme: light){ :root:not([data-theme="dark"]) .btn.primary{color:#fff} }
-.btn.primary:hover{filter:brightness(1.12)}
+.btn.primary{background:var(--accent); color:var(--on-accent); border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.1)}
 .btn.danger{color:var(--danger)}
 .btn.danger:hover{background:var(--danger-soft)}
 .btn.icon{width:28px; height:28px; padding:0}
@@ -149,7 +152,7 @@ button,input,select,textarea{font:inherit; color:inherit}
 .tab{
   background:none; border:0; padding:13px 0 11px; cursor:pointer; position:relative;
   font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:10px; letter-spacing:.12em;
-  text-transform:uppercase; color:var(--ink-3);
+  text-transform:uppercase; color:var(--ink-2);
 }
 .tab:hover{color:var(--ink-2)}
 .tab[aria-selected="true"]{color:var(--ink)}
@@ -162,7 +165,7 @@ button,input,select,textarea{font:inherit; color:inherit}
 .group{display:flex; flex-direction:column; gap:2px}
 .group > h3{
   margin:0 0 8px; font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:9.5px;
-  letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3); font-weight:500;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--ink-2); font-weight:500;
 }
 .grouphead{display:flex; align-items:baseline; gap:8px; margin:0 0 8px}
 .grouphead h3{margin:0}
@@ -173,7 +176,7 @@ button,input,select,textarea{font:inherit; color:inherit}
 .f + .f{border-top:1px solid var(--line-2)}
 .f label{
   font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:9px; letter-spacing:.1em;
-  text-transform:uppercase; color:var(--ink-3);
+  text-transform:uppercase; color:var(--ink-2);
 }
 .f input,.f textarea{
   width:100%; background:transparent; border:0; padding:1px 0; font-size:13px; color:var(--ink);
@@ -312,14 +315,12 @@ button,input,select,textarea{font:inherit; color:inherit}
 .pagewrap{display:flex; flex-direction:column; gap:7px}
 .pagelabel{
   font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:9px; letter-spacing:.12em;
-  text-transform:uppercase; color:var(--ink-3);
+  text-transform:uppercase; color:var(--ink-2);
 }
 .page{
-  background:var(--paper); color:var(--paper-ink); border:1px solid var(--paper-line);
+  background:var(--paper); color:var(--paper-ink); border:1px solid var(--page-edge);
   position:relative; overflow:hidden;
 }
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .page{border-color:#C9CDD2} }
-:root[data-theme="dark"] .page{border-color:#C9CDD2}
 .page-inner{width:100%; height:100%; overflow:hidden}
 
 /* ============================================================ resume ==== */
@@ -363,6 +364,7 @@ button,input,select,textarea{font:inherit; color:inherit}
   font-variant-numeric:tabular-nums; overflow-wrap:normal;
 }
 .r-sub{font-size:calc(9.4pt * var(--rs)); color:var(--paper-ink-2)}
+.r-sub a{color:inherit; text-decoration:none}
 .r-bul{margin:calc(4px * var(--rs)) 0 0; padding-left:calc(13px * var(--rs)); list-style:none}
 .r-bul li{position:relative; margin-bottom:calc(2.5px * var(--rs)); break-inside:avoid}
 .r-bul li::before{
@@ -701,6 +703,13 @@ input[type=range]{
 
     <span class="vr hidesm"></span>
 
+    <div class="menuwrap">
+      <button class="btn icon" id="btnTheme" aria-label="Appearance" title="Appearance">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <div class="menu" id="menuTheme"></div>
+    </div>
+
     <button class="btn" id="btnPrint" title="Opens the print dialog - choose Save as PDF">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
       <span class="hidesm">PDF</span>
@@ -908,7 +917,7 @@ const TYPES = {
     ] },
 
   awards: { name: "Certifications", blurb: "Professional certifications", kind: "items",
-    add: "Add a certification", primary: "name", org: "issuer", meta: "", single: "date",
+    add: "Add a certification", primary: "name", org: "issuer", meta: "link", single: "date",
     bul: "Details", bulPh: "Scored in the top 5% of the cohort",
     fields: [
       { k: "name",   l: "Certification", ph: "AWS Solutions Architect", w: "full" },
@@ -1371,6 +1380,15 @@ function headHTML() {
   if (bits.length) h += '<div class="r-contact">' + bits.join('<span class="sep">&nbsp;&middot;&nbsp;</span>') + "</div>";
   return h + "</div>";
 }
+function looksLikeUrl(s) {
+  return /^(https?:\/\/|www\.)/i.test(s) || /^[\w-]+(\.[\w-]+)+(\/|$)/.test(s);
+}
+function linkHTML(s) {
+  const t = String(s).trim();
+  const href = /^https?:/i.test(t) ? t : "https://" + t;
+  return '<a href="' + esc(href) + '" rel="noreferrer">' + esc(t.replace(/^https?:\/\//i, "")) + "</a>";
+}
+
 function itemHTML(sec, it) {
   const t = TYPES[sec.type], f = doc.design.dateFmt;
   const title = (it[t.primary] || "").trim();
@@ -1387,8 +1405,11 @@ function itemHTML(sec, it) {
   h += "</div>";
   if (when) h += '<div class="r-when">' + esc(when) + "</div>";
   h += "</div>";
-  const subline = [sub, meta].filter(Boolean).join(" · ");
-  if (subline) h += '<div class="r-sub">' + esc(subline) + "</div>";
+  /* a credential or project address is worth clicking in the exported PDF */
+  const bits = [];
+  if (sub) bits.push(esc(sub));
+  if (meta) bits.push(t.meta === "link" || looksLikeUrl(meta) ? linkHTML(meta) : esc(meta));
+  if (bits.length) h += '<div class="r-sub">' + bits.join(" · ") + "</div>";
   if (buls.length) h += '<ul class="r-bul">' + buls.map(b => "<li>" + esc(b.trim()) + "</li>").join("") + "</ul>";
   return h + "</div>";
 }
@@ -1985,6 +2006,31 @@ function ask(title, body, okLabel) {
   });
 }
 
+/* ---- appearance: follow the system, or pin it ---- */
+function applyTheme() {
+  const t = lib.theme || "auto";
+  if (t === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", t);
+  const m = $("#menuTheme");
+  if (m) {
+    m.innerHTML = [["auto", "Match system"], ["light", "Light"], ["dark", "Dark"]]
+      .map(o => '<button data-theme="' + o[0] + '">' + o[1] +
+        (t === o[0] ? '<small style="color:var(--accent)">' + ICON.check + "</small>" : "") + "</button>").join("");
+  }
+}
+$("#btnTheme").addEventListener("click", e => {
+  e.stopPropagation();
+  const m = $("#menuTheme"), was = m.classList.contains("open");
+  $$(".menu.open").forEach(x => x.classList.remove("open"));
+  if (!was) m.classList.add("open");
+});
+$("#menuTheme").addEventListener("click", e => {
+  const b = e.target.closest("[data-theme]"); if (!b) return;
+  lib.theme = b.dataset.theme;
+  applyTheme(); save(true);
+  $("#menuTheme").classList.remove("open");
+});
+
 $("#btnExport").addEventListener("click", e => {
   e.stopPropagation();
   const m = $("#menuExport"), was = m.classList.contains("open");
@@ -2006,6 +2052,7 @@ window.RG = {
   TYPES, uid, openModal, closeModal, $, $$, esc, ask, fmtDate, fmtRange,
   newFile, setActiveName, activeEntry, firstVisit, flashSaved
 };
+applyTheme();
 renderAll();
 save(true);
 

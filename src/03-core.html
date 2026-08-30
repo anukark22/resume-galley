@@ -74,7 +74,7 @@ const TYPES = {
     ] },
 
   awards: { name: "Certifications", blurb: "Professional certifications", kind: "items",
-    add: "Add a certification", primary: "name", org: "issuer", meta: "", single: "date",
+    add: "Add a certification", primary: "name", org: "issuer", meta: "link", single: "date",
     bul: "Details", bulPh: "Scored in the top 5% of the cohort",
     fields: [
       { k: "name",   l: "Certification", ph: "AWS Solutions Architect", w: "full" },
@@ -537,6 +537,15 @@ function headHTML() {
   if (bits.length) h += '<div class="r-contact">' + bits.join('<span class="sep">&nbsp;&middot;&nbsp;</span>') + "</div>";
   return h + "</div>";
 }
+function looksLikeUrl(s) {
+  return /^(https?:\/\/|www\.)/i.test(s) || /^[\w-]+(\.[\w-]+)+(\/|$)/.test(s);
+}
+function linkHTML(s) {
+  const t = String(s).trim();
+  const href = /^https?:/i.test(t) ? t : "https://" + t;
+  return '<a href="' + esc(href) + '" rel="noreferrer">' + esc(t.replace(/^https?:\/\//i, "")) + "</a>";
+}
+
 function itemHTML(sec, it) {
   const t = TYPES[sec.type], f = doc.design.dateFmt;
   const title = (it[t.primary] || "").trim();
@@ -553,8 +562,11 @@ function itemHTML(sec, it) {
   h += "</div>";
   if (when) h += '<div class="r-when">' + esc(when) + "</div>";
   h += "</div>";
-  const subline = [sub, meta].filter(Boolean).join(" · ");
-  if (subline) h += '<div class="r-sub">' + esc(subline) + "</div>";
+  /* a credential or project address is worth clicking in the exported PDF */
+  const bits = [];
+  if (sub) bits.push(esc(sub));
+  if (meta) bits.push(t.meta === "link" || looksLikeUrl(meta) ? linkHTML(meta) : esc(meta));
+  if (bits.length) h += '<div class="r-sub">' + bits.join(" · ") + "</div>";
   if (buls.length) h += '<ul class="r-bul">' + buls.map(b => "<li>" + esc(b.trim()) + "</li>").join("") + "</ul>";
   return h + "</div>";
 }
@@ -1151,6 +1163,31 @@ function ask(title, body, okLabel) {
   });
 }
 
+/* ---- appearance: follow the system, or pin it ---- */
+function applyTheme() {
+  const t = lib.theme || "auto";
+  if (t === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", t);
+  const m = $("#menuTheme");
+  if (m) {
+    m.innerHTML = [["auto", "Match system"], ["light", "Light"], ["dark", "Dark"]]
+      .map(o => '<button data-theme="' + o[0] + '">' + o[1] +
+        (t === o[0] ? '<small style="color:var(--accent)">' + ICON.check + "</small>" : "") + "</button>").join("");
+  }
+}
+$("#btnTheme").addEventListener("click", e => {
+  e.stopPropagation();
+  const m = $("#menuTheme"), was = m.classList.contains("open");
+  $$(".menu.open").forEach(x => x.classList.remove("open"));
+  if (!was) m.classList.add("open");
+});
+$("#menuTheme").addEventListener("click", e => {
+  const b = e.target.closest("[data-theme]"); if (!b) return;
+  lib.theme = b.dataset.theme;
+  applyTheme(); save(true);
+  $("#menuTheme").classList.remove("open");
+});
+
 $("#btnExport").addEventListener("click", e => {
   e.stopPropagation();
   const m = $("#menuExport"), was = m.classList.contains("open");
@@ -1172,6 +1209,7 @@ window.RG = {
   TYPES, uid, openModal, closeModal, $, $$, esc, ask, fmtDate, fmtRange,
   newFile, setActiveName, activeEntry, firstVisit, flashSaved
 };
+applyTheme();
 renderAll();
 save(true);
 
