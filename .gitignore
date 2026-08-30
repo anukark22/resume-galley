@@ -19,3 +19,6 @@ scratch/
 # never commit a real resume - test/ holds generated fixtures only
 test/real-*
 *-personal.*
+
+.vercel
+.env*
