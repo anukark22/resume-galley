@@ -783,10 +783,17 @@ input[type=range]{
 @media print{
   html,body{background:#fff !important; height:auto !important; overflow:visible !important}
   .app{height:auto; display:block; overflow:visible}
-  .topbar,.rail,.mobnav,.doctools,.scrim,#toast,.pagelabel,#measure{display:none !important}
+  .topbar,.rail,.mobnav,.doctools,.scrim,#toast,.pagelabel,#measure,#report{display:none !important}
   .work{display:block; overflow:visible}
   .canvas{padding:0; display:block; background:#fff; overflow:visible}
-  .pages{display:block; transform:none !important; gap:0}
+  /* fit() writes an inline scale and negative margins to centre the shrunken
+     preview. Printing drops the transform, so those margins would survive on
+     their own - shoving the sheet off the left edge and eating the height of
+     every page after the first. Clear all of it. */
+  .pages{
+    display:block !important; gap:0;
+    transform:none !important; width:auto !important; margin:0 !important;
+  }
   .pagewrap{display:block; gap:0}
   .page{
     border:0 !important; width:100% !important; height:auto !important; min-height:0 !important;
@@ -3785,12 +3792,30 @@ function doPrint() {
   /* each page is now its own element carrying its own padding, so @page adds
      no margin of its own - otherwise the two would stack */
   st.textContent = "@page{size:" + (d.paper === "a4" ? "A4" : "letter") + "; margin:0}";
-  /* embedded viewers sandbox printing; say so rather than letting it fail silently */
+
+  /* fit() writes an inline scale and negative margins onto #pages to centre the
+     shrunken preview. Print drops the transform but would keep the margins,
+     which pushes the sheet off the page. The stylesheet overrides them, and
+     clearing them here as well means no future style change can reintroduce it. */
+  const host = $("#pages");
+  const saved = host ? host.getAttribute("style") : null;
+  const restore = () => {
+    if (!host) return;
+    if (saved === null) host.removeAttribute("style"); else host.setAttribute("style", saved);
+  };
+  if (host) host.removeAttribute("style");
+  window.addEventListener("afterprint", function once() {
+    window.removeEventListener("afterprint", once);
+    restore();
+  });
+
   if (window.claude && window.claude.use) {
     toast("Opening the print dialog. If nothing appears, this viewer blocks printing - open the copy in your resumemaker folder and print from there.");
   }
   try { window.print(); }
   catch (e) { toast("This viewer will not open a print dialog. Use the copy in your resumemaker folder.", "bad"); }
+  /* afterprint does not fire everywhere; put the preview back regardless */
+  setTimeout(restore, 1500);
 }
 
 $("#btnPrint").addEventListener("click", doPrint);

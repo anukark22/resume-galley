@@ -776,10 +776,17 @@ input[type=range]{
 @media print{
   html,body{background:#fff !important; height:auto !important; overflow:visible !important}
   .app{height:auto; display:block; overflow:visible}
-  .topbar,.rail,.mobnav,.doctools,.scrim,#toast,.pagelabel,#measure{display:none !important}
+  .topbar,.rail,.mobnav,.doctools,.scrim,#toast,.pagelabel,#measure,#report{display:none !important}
   .work{display:block; overflow:visible}
   .canvas{padding:0; display:block; background:#fff; overflow:visible}
-  .pages{display:block; transform:none !important; gap:0}
+  /* fit() writes an inline scale and negative margins to centre the shrunken
+     preview. Printing drops the transform, so those margins would survive on
+     their own - shoving the sheet off the left edge and eating the height of
+     every page after the first. Clear all of it. */
+  .pages{
+    display:block !important; gap:0;
+    transform:none !important; width:auto !important; margin:0 !important;
+  }
   .pagewrap{display:block; gap:0}
   .page{
     border:0 !important; width:100% !important; height:auto !important; min-height:0 !important;
