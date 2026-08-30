@@ -1,41 +1,49 @@
 
 <div class="app">
-  <header class="bar">
-    <div class="wordmark">
-      <span class="pilcrow" aria-hidden="true">&#182;</span>
-      <b>Resume&nbsp;Galley</b>
-      <i>proof &amp; press</i>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M6.3 17V3.6h4.4a3.7 3.7 0 0 1 0 7.3H6.3"/>
+        <path d="M10.9 10.9 15.1 17"/>
+      </svg>
+      <b>Resume Galley</b>
     </div>
 
+    <span class="vr hidesm"></span>
+
     <button class="btn" id="btnImport">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-      <span class="lbl">Import</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span class="hidesm">Import</span>
     </button>
 
-    <div class="spacer"></div>
-    <span class="saved" id="savedTag">saved locally</span>
+    <span class="grow"></span>
 
-    <button class="btn" id="btnPrint" title="Opens your browser print dialog &mdash; choose Save as PDF">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-      <span class="lbl">PDF</span>
+    <div class="docname">
+      <b id="docName">Untitled resume</b>
+      <span class="savedot" id="saveDot"><i></i><span id="saveText">Saved</span></span>
+    </div>
+
+    <span class="vr hidesm"></span>
+
+    <button class="btn" id="btnPrint" title="Opens the print dialog - choose Save as PDF">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>
+      <span class="hidesm">PDF</span>
     </button>
 
-    <div class="menu-wrap">
+    <div class="menuwrap">
       <button class="btn primary" id="btnExport">
-        <span class="lbl">Export</span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+        Export
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="menu" id="menuExport">
-        <div class="head">Download</div>
+        <div class="lbl meta">Download</div>
         <button data-act="docx">Word document<small>.docx</small></button>
-        <button data-act="pdf">Print to PDF<small>&#8984;P</small></button>
+        <button data-act="pdf">Print to PDF</button>
         <button data-act="txt">Plain text<small>.txt</small></button>
         <div class="sep"></div>
-        <div class="head">Backup</div>
+        <div class="lbl meta">Backup</div>
         <button data-act="json">Save all data<small>.json</small></button>
         <button data-act="loadjson">Restore from backup</button>
-        <div class="sep"></div>
-        <button data-act="reset" class="danger">Clear and start over</button>
       </div>
     </div>
   </header>
@@ -49,131 +57,102 @@
       </div>
 
       <div class="pane on" id="pane-content" role="tabpanel" aria-labelledby="tab-content"></div>
-
+      <div class="pane" id="pane-design" role="tabpanel" aria-labelledby="tab-design"></div>
       <div class="pane" id="pane-files" role="tabpanel" aria-labelledby="tab-files"></div>
-
-      <div class="pane" id="pane-design" role="tabpanel" aria-labelledby="tab-design">
-        <h3>Layout</h3>
-        <div class="seg" id="segTpl" role="group" aria-label="Heading style">
-          <button data-v="rail" aria-pressed="true">Side</button>
-          <button data-v="modern" aria-pressed="false">Modern</button>
-          <button data-v="classic" aria-pressed="false">Classic</button>
-          <button data-v="rule" aria-pressed="false">Rule</button>
-        </div>
-
-        <h3>Typeface</h3>
-        <div class="seg" id="segFace" role="group" aria-label="Typeface">
-          <button data-v="serif" aria-pressed="true">Serif</button>
-          <button data-v="sans" aria-pressed="false">Sans</button>
-          <button data-v="times" aria-pressed="false">Times</button>
-        </div>
-
-        <h3>Accent</h3>
-        <div class="swatches" id="swatches"></div>
-
-        <h3>Text size <span class="val" id="valScale">100%</span></h3>
-        <input type="range" id="rngScale" min="82" max="118" step="2" value="100" aria-label="Text size">
-
-        <h3>Line spacing <span class="val" id="valLead">1.42</span></h3>
-        <input type="range" id="rngLead" min="120" max="175" step="2" value="142" aria-label="Line spacing">
-
-        <h3>Page margin <span class="val" id="valMg">0.67 in</span></h3>
-        <input type="range" id="rngMg" min="36" max="96" step="4" value="64" aria-label="Page margin">
-
-        <h3>Paper</h3>
-        <div class="seg" id="segPaper" role="group" aria-label="Paper size">
-          <button data-v="letter" aria-pressed="true">US Letter</button>
-          <button data-v="a4" aria-pressed="false">A4</button>
-        </div>
-
-        <h3>Dates</h3>
-        <div class="seg" id="segDate" role="group" aria-label="Date separator">
-          <button data-v="en" aria-pressed="true">Jan 2024 &ndash; Now</button>
-          <button data-v="to" aria-pressed="false">Jan 2024 to Now</button>
-        </div>
-
-        <div class="note" style="margin-top:12px">
-          <span class="ic" aria-hidden="true">&#182;</span>
-          <div>Everything you type is kept in this browser only. Use <b>Export &rsaquo; Save all data</b> for a backup you can restore anywhere.</div>
-        </div>
-      </div>
     </aside>
 
-    <main class="stage" id="stage">
-      <div class="stage-bar" id="stageBar"></div>
-      <div class="sheet-wrap">
-        <div class="sheet" id="sheet" data-tpl="modern" data-face="serif">
-          <div class="sheet-inner" id="sheetInner"></div>
+    <main class="canvas" id="canvas">
+      <div class="doctools" id="docTools">
+        <div class="docstat" id="docStat"></div>
+        <span class="grow"></span>
+        <div class="zoom">
+          <button class="btn icon" id="zoomOut" aria-label="Zoom out">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <span class="zoomval" id="zoomVal" title="Reset to fit">100%</span>
+          <button class="btn icon" id="zoomIn" aria-label="Zoom in">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
         </div>
       </div>
+      <div class="pages" id="pages"></div>
+      <div id="measure" aria-hidden="true"></div>
     </main>
   </div>
 </div>
 
-<nav class="mob-tabs" aria-label="View">
+<nav class="mobnav" aria-label="View">
   <button data-view="edit" aria-pressed="true">Edit</button>
   <button data-view="preview" aria-pressed="false">Preview</button>
 </nav>
 
-<!-- ── import dialog ── -->
+<!-- import -->
 <div class="scrim" id="importScrim">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="importTitle">
     <div class="modal-head">
-      <h2 id="importTitle">Bring in your resume</h2>
-      <p>Drop the file you have now. It gets pulled apart into editable sections &mdash; you never retype it.</p>
+      <h2 id="importTitle">Import your resume</h2>
+      <p>Upload a resume and we&rsquo;ll organise its content into editable sections.</p>
     </div>
     <div class="modal-body">
       <div class="drop" id="dropZone" tabindex="0" role="button" aria-label="Choose resume files">
-        <strong>Drop files, or click to choose</strong>
-        <span>Several at once is fine &mdash; each is saved as its own resume.</span>
-        <span class="exts">.docx &nbsp;&middot;&nbsp; .pdf &nbsp;&middot;&nbsp; .txt &nbsp;&middot;&nbsp; .json backup</span>
+        <b>Drop your resume here</b>
+        <span>or click to choose &mdash; several files at once is fine</span>
+        <span class="exts">PDF &nbsp;&middot;&nbsp; DOCX &nbsp;&middot;&nbsp; TXT &nbsp;&middot;&nbsp; JSON backup</span>
       </div>
       <input type="file" id="fileInput" accept=".docx,.pdf,.txt,.md,.json" multiple hidden>
 
-      <div id="fileList" class="filelist" hidden></div>
+      <div class="filerows" id="fileList" hidden></div>
+      <div class="readout" id="readout" hidden></div>
 
       <div id="pasteWrap">
-        <div class="or">or paste the text</div>
-        <textarea class="paste" id="pasteBox" placeholder="Select all in Canva, Word or your PDF viewer, copy, and paste here.&#10;&#10;JANE PERERA&#10;jane@email.com | +94 77 123 4567 | Colombo&#10;&#10;EXPERIENCE&#10;Product Designer, Acme  Jan 2023 - Present&#10;- Redesigned onboarding, lifting activation 24%"></textarea>
+        <div class="orline">or paste resume text</div>
+        <textarea class="paste" id="pasteBox" placeholder="Select all in your resume, copy, and paste here."></textarea>
       </div>
 
-      <div class="note" id="importNote" hidden><span class="ic" aria-hidden="true">&#182;</span><div id="importNoteText"></div></div>
-
       <div>
-        <h3 style="margin:0 0 5px">Where it goes</h3>
-        <div class="seg" id="segDest" role="group" aria-label="Where the import goes">
-          <button data-v="new" aria-pressed="true">Save as a new resume</button>
-          <button data-v="replace" aria-pressed="false">Replace this one</button>
-          <button data-v="merge" aria-pressed="false">Add to this one</button>
+        <h4 class="meta" style="margin:0 0 8px">Where should this resume go?</h4>
+        <div class="radios" id="destRadios" role="radiogroup" aria-label="Where should this resume go">
+          <div class="radio" role="radio" tabindex="0" data-v="new" aria-checked="true">
+            <span class="dot"></span>
+            <span class="t"><b>New resume</b><small>Save it alongside the ones you already have</small></span>
+          </div>
+          <div class="radio" role="radio" tabindex="0" data-v="replace" aria-checked="false">
+            <span class="dot"></span>
+            <span class="t"><b>Replace current</b><small>Overwrite the resume you are editing</small></span>
+          </div>
+          <div class="radio" role="radio" tabindex="0" data-v="merge" aria-checked="false">
+            <span class="dot"></span>
+            <span class="t"><b>Add to current</b><small>Append its sections to the one you are editing</small></span>
+          </div>
         </div>
       </div>
     </div>
     <div class="modal-foot">
       <button class="btn" data-close>Cancel</button>
-      <button class="btn primary" id="btnParse">Read it in</button>
+      <button class="btn primary" id="btnParse">Import</button>
     </div>
   </div>
 </div>
 
-<!-- ── confirm dialog (sandboxed frames block window.confirm) ── -->
+<!-- add section -->
+<div class="scrim" id="addScrim">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="addTitle" style="max-width:470px">
+    <div class="modal-head"><h2 id="addTitle">Add a section</h2></div>
+    <div class="modal-body"><div class="addgrid" id="addList"></div></div>
+    <div class="modal-foot"><button class="btn" data-close>Cancel</button></div>
+  </div>
+</div>
+
+<!-- confirm -->
 <div class="scrim" id="askScrim">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="askTitle" style="max-width:430px">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="askTitle" style="max-width:420px">
     <div class="modal-head">
       <h2 id="askTitle">Are you sure?</h2>
       <p id="askBody"></p>
     </div>
     <div class="modal-foot">
-      <button class="btn" data-close>Keep it</button>
+      <button class="btn outline" data-close>Cancel</button>
       <button class="btn primary" id="askOk">Delete</button>
     </div>
-  </div>
-</div>
-
-<!-- ── add section dialog ── -->
-<div class="scrim" id="addScrim">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="addTitle" style="max-width:480px">
-    <div class="modal-head"><h2 id="addTitle">Add a section</h2></div>
-    <div class="modal-body" id="addList" style="gap:7px"></div>
-    <div class="modal-foot"><button class="btn" data-close>Cancel</button></div>
   </div>
 </div>

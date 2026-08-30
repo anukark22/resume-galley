@@ -15,14 +15,9 @@ function toast(msg, kind, action) {
   if (!t) {
     t = document.createElement("div");
     t.id = "toast";
-    t.style.cssText = "position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:200;" +
-      "background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px 9px 15px;" +
-      "box-shadow:var(--shadow);font-size:13px;max-width:min(520px,92vw);line-height:1.45;display:none;" +
-      "align-items:center;gap:10px";
-    t.innerHTML = '<span></span>';
+    t.innerHTML = "<span></span>";
     document.body.appendChild(t);
   }
-  t.style.borderColor = kind === "bad" ? "var(--mark-line)" : "var(--line)";
   t.firstChild.textContent = msg;
   const old = $("#toastBtn", t);
   if (old) old.remove();
@@ -1039,17 +1034,46 @@ function cap(s) {
    and you get one file each.
    ========================================================================== */
 const scrim = $("#importScrim"), drop = $("#dropZone"), fileInput = $("#fileInput");
-const paste = $("#pasteBox"), note = $("#importNote"), noteText = $("#importNoteText");
+const paste = $("#pasteBox"), readout = $("#readout");
 const fileList = $("#fileList");
 let pending = [];          /* one entry per document waiting to be read in */
 
-function showNote(html, kind) {
-  note.hidden = false;
-  note.className = "note" + (kind ? " " + kind : "");
-  noteText.innerHTML = html;
+function showNote(html) {
+  readout.hidden = false;
+  readout.innerHTML = '<p style="margin:0;font-size:12.5px;color:var(--ink-2);line-height:1.5">' + html + "</p>";
+}
+
+const TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+const FLAG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16.4" x2="12" y2="16.5"/></svg>';
+
+/* what the parser recognised, and what is worth a second look */
+function inspect(d, tone) {
+  const found = [], review = [];
+  const seen = {};
+  d.sections.forEach(s => {
+    const n = RG.TYPES[s.type] ? RG.TYPES[s.type].name : "Section";
+    if (!seen[n]) { seen[n] = 1; found.push(s.title || n); }
+  });
+  if (!(d.header.name || "").trim()) review.push("Your name");
+  if (!(d.header.email || "").trim()) review.push("Contact details");
+  const items = d.sections.filter(s => s.items).reduce((a, s) => a.concat(s.items), []);
+  if (items.length && items.some(i => !(i.start || i.end || i.date))) review.push("Dates");
+  if (tone === "warn") review.push("Text formatting");
+  if (d.sections.length < 2) review.push("Section detection");
+  return { found: found, review: review };
+}
+function readoutHTML(info) {
+  const col = (title, list, cls, ic) =>
+    "<div><h4>" + title + "</h4><ul>" +
+      (list.length ? list.slice(0, 6).map(x => '<li class="' + cls + '">' + ic + esc(x) + "</li>").join("")
+                   : '<li class="review" style="color:var(--ink-3)">Nothing flagged</li>') +
+    "</ul></div>";
+  return '<div class="cols">' +
+    col("We found", info.found, "found", TICK) +
+    col("Review recommended", info.review, "review", FLAG) + "</div>";
 }
 function destMode() {
-  const b = $('#segDest button[aria-pressed="true"]');
+  const b = $('#destRadios [aria-checked="true"]');
   return b ? b.dataset.v : "new";
 }
 function baseName(n) {
@@ -1138,7 +1162,7 @@ function grade(txt, kind, mapped) {
     (kind === "PDF" && mapped ? ", decoded through the embedded font map" : "") + "." };
 }
 
-/* one file goes to the review box; several are listed instead */
+/* one file gets a review box and a breakdown; several are listed instead */
 function renderPending() {
   const many = pending.length > 1;
   fileList.hidden = !many;
@@ -1147,25 +1171,35 @@ function renderPending() {
   if (!many) {
     const p = pending[0];
     paste.value = p && p.text ? p.text : "";
-    showNote((p ? p.note : "") + (p && !p.failed && !p.doc ?
-      " Skim the box below, then press <b>Read it in</b>." : ""), p ? p.tone : "");
+    if (!p) { readout.hidden = true; return; }
+    if (p.failed) { showNote(p.note); return; }
+    const d = p.doc || parseResume(p.text);
+    readout.hidden = false;
+    readout.innerHTML =
+      '<p style="margin:0;font-size:12.5px;color:var(--ink-2);line-height:1.5">' + p.note + "</p>" +
+      readoutHTML(inspect(d, p.tone));
     return;
   }
 
   const ok = pending.filter(p => !p.failed && p.tone !== "warn").length;
   fileList.innerHTML = pending.map(p =>
-    '<div class="fitem' + (p.tone === "warn" ? " bad" : "") + '">' +
-      '<span class="fdot"' + (p.tone === "warn" ? ' data-off="1"' : "") + '></span>' +
-      '<span class="fname"><b>' + esc(p.name) + "</b><small>" + p.note + "</small></span>" +
-    "</div>"
+    '<div class="frow2' + (p.tone === "warn" || p.failed ? " bad" : "") + '">' +
+      (p.tone === "warn" || p.failed ? FLAG : TICK) +
+      '<span class="m"><b>' + esc(p.name) + "</b><small>" + p.note + "</small></span></div>"
   ).join("");
-  showNote("<b>" + pending.length + " files read</b>, " + ok + " cleanly. Each one is saved as " +
-    "its own resume in the Files tab.", ok === pending.length ? "ok" : "warn");
+  showNote("<b>" + pending.length + " files read</b>, " + ok + " cleanly. Each becomes its own resume.");
 }
 
-$("#segDest").addEventListener("click", e => {
-  const b = e.target.closest("button"); if (!b) return;
-  $$("#segDest button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+$("#destRadios").addEventListener("click", e => {
+  const r = e.target.closest("[data-v]"); if (!r) return;
+  $$("#destRadios [data-v]").forEach(x => x.setAttribute("aria-checked", String(x === r)));
+});
+$("#destRadios").addEventListener("keydown", e => {
+  const r = e.target.closest("[data-v]");
+  if (r && (e.key === "Enter" || e.key === " ")) {
+    e.preventDefault();
+    $$("#destRadios [data-v]").forEach(x => x.setAttribute("aria-checked", String(x === r)));
+  }
 });
 
 $("#btnParse").addEventListener("click", () => {
@@ -1246,9 +1280,10 @@ function resetImport() {
   fileList.innerHTML = "";
   fileList.hidden = true;
   $("#pasteWrap").hidden = false;
-  note.hidden = true;
+  readout.hidden = true;
+  readout.innerHTML = "";
   fileInput.value = "";
-  $$("#segDest button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === "new")));
+  $$("#destRadios [data-v]").forEach(b => b.setAttribute("aria-checked", String(b.dataset.v === "new")));
 }
 RG.resetImport = resetImport;
 
@@ -1408,7 +1443,7 @@ function buildDocx() {
         const title = (it[t.primary] || "").trim();
         const org = (it[t.org] || "").trim();
         const meta = t.meta ? (it[t.meta] || "").trim() : "";
-        const when = t.single ? (it[t.single] || "").trim() : plainRange(it.start, it.end);
+        const when = t.single ? plainDate(it[t.single]) : plainRange(it.start, it.end);
         const sub = (it.sub || "").trim();
         const buls = (it.bullets || []).filter(b => b && b.trim());
         if (!title && !org && !when && !buls.length) return;
@@ -1462,10 +1497,9 @@ function buildDocx() {
 }
 
 function plainRange(a, b) {
-  a = (a || "").trim(); b = (b || "").trim();
-  const sep = RG.doc.design.dateSep === "to" ? " to " : " – ";
-  return a && b ? a + sep + b : (a || b);
+  return RG.fmtRange(a, b, RG.doc.design.dateFmt);
 }
+function plainDate(a) { return RG.fmtDate(a, RG.doc.design.dateFmt); }
 
 function buildTxt() {
   const doc = RG.doc, out = [];
@@ -1489,7 +1523,7 @@ function buildTxt() {
     });
     if (t.kind === "items") sec.items.forEach(it => {
       const title = (it[t.primary] || "").trim(), org = (it[t.org] || "").trim();
-      const when = t.single ? (it[t.single] || "").trim() : plainRange(it.start, it.end);
+      const when = t.single ? plainDate(it[t.single]) : plainRange(it.start, it.end);
       const head = [ [title, org].filter(Boolean).join(", "), when ].filter(Boolean).join("  ");
       if (head) rows.push(head);
       const sub = [(it.sub || "").trim(), t.meta ? (it[t.meta] || "").trim() : ""].filter(Boolean).join(" · ");
@@ -1543,11 +1577,9 @@ function doPrint() {
   const d = RG.doc.design;
   let st = $("#pageStyle");
   if (!st) { st = document.createElement("style"); st.id = "pageStyle"; document.head.appendChild(st); }
-  /* the page margin belongs to @page so that every page carries it, not just
-     the first - the sheet drops its own padding in the print stylesheet */
-  st.textContent = "@page{size:" + (d.paper === "a4" ? "A4" : "letter") +
-                   "; margin:" + d.mg + "px}" +
-                   "@media print{.sheet-wrap{width:auto !important;height:auto !important}}";
+  /* each page is now its own element carrying its own padding, so @page adds
+     no margin of its own - otherwise the two would stack */
+  st.textContent = "@page{size:" + (d.paper === "a4" ? "A4" : "letter") + "; margin:0}";
   /* embedded viewers sandbox printing; say so rather than letting it fail silently */
   if (window.claude && window.claude.use) {
     toast("Opening the print dialog. If nothing appears, this viewer blocks printing - open the copy in your resumemaker folder and print from there.");
