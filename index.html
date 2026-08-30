@@ -784,8 +784,13 @@ input[type=range]{
   html,body{background:#fff !important; height:auto !important; overflow:visible !important}
   .app{height:auto; display:block; overflow:visible}
   .topbar,.rail,.mobnav,.doctools,.scrim,#toast,.pagelabel,#measure,#report{display:none !important}
-  .work{display:block; overflow:visible}
-  .canvas{padding:0; display:block; background:#fff; overflow:visible}
+  .work{display:block !important; overflow:visible}
+  /* A printed page is laid out at paper width - 816px for Letter - which is
+     under the 900px mobile breakpoint, so `body[data-view="edit"] .canvas
+     {display:none}` applies and out-specifies a plain `.canvas` rule. Without
+     !important here the whole document prints blank. */
+  .canvas{padding:0 !important; display:block !important; background:#fff; overflow:visible}
+  .rail{display:none !important}
   /* fit() writes an inline scale and negative margins to centre the shrunken
      preview. Printing drops the transform, so those margins would survive on
      their own - shoving the sheet off the left edge and eating the height of

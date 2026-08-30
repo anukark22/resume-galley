@@ -28,3 +28,9 @@ public/
 .env.local
 .env
 !.env.example
+
+# print verification artefacts
+test/print-*.html
+test/print-out.pdf
+test/bisect.*
+test/plain.html
